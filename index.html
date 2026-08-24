@@ -600,7 +600,14 @@ function startLevel(levelIndex) {
     lastTick: performance.now(),
     over: false,
     walkers: cabin.aisles.flatMap((aisle) =>
-      [0.05, 0.3, 0.55, 0.78].map((phase) => ({ aisle, phase }))
+      [0.05, 0.3, 0.55, 0.78].map((phase, i) => ({
+        aisle,
+        phase,
+        shirt: ["#6f8fb8", "#b88f6f", "#7fb08a", "#a884b8", "#b8a06f", "#8aa4c4"][(Math.random() * 6) | 0],
+        hair: ["#2c2620", "#4a3826", "#6b5a3e", "#1f2733", "#5c4632"][(Math.random() * 5) | 0],
+        skin: ["#e8c39e", "#c68e5e", "#8d5a3b", "#f0d5b8", "#6b4226"][(Math.random() * 5) | 0],
+        bag: i % 2 === 0 ? BAG_COLORS[(Math.random() * BAG_COLORS.length) | 0] : null,
+      }))
     ),
   };
 
@@ -964,20 +971,62 @@ function drawSuitcase(bin, bag, x, w) {
   });
 }
 
+// Passengers seen from above: shoulders, swinging arms, a head with hair,
+// and (for some) a rollaboard towed behind them up the aisle.
 function drawWalkers() {
   const now = performance.now();
   const { cabinTop } = state.cabin;
   state.walkers.forEach((w) => {
     const t = (now / 2600 + w.phase) % 1;
     const y = cabinTop + t * Math.max(state.sweepY - cabinTop, 24);
-    const cx = w.aisle.x + w.aisle.width / 2 + Math.sin(now / 190 + w.phase * 10) * 3;
-    ctx.fillStyle = "#5b7ba8";
+    const stride = now / 170 + w.phase * 10;
+    const cx = w.aisle.x + w.aisle.width / 2 + Math.sin(stride / 2) * 2.5;
+    const sway = Math.sin(stride) * 0.12;   // shoulder rotation while walking
+    const swing = Math.sin(stride) * 3.5;   // opposite-arm swing
+
+    // towed rollaboard trails behind (up the aisle), tilted with the pull
+    if (w.bag) {
+      const bx = cx - Math.sin(sway * 2) * 2;
+      const by = y - 16;
+      ctx.strokeStyle = "rgba(160,175,195,0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - 6, y - 1);
+      ctx.lineTo(bx, by + 4);
+      ctx.stroke();
+      ctx.fillStyle = w.bag;
+      roundRect(ctx, bx - 4.5, by - 6, 9, 11, 3);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // arms — small hands at the shoulder tips, swinging alternately
+    ctx.fillStyle = w.skin;
+    [-1, 1].forEach((side) => {
+      ctx.beginPath();
+      ctx.arc(cx + side * 8 * Math.cos(sway), y + side * swing * 0.8, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // shoulders
+    ctx.fillStyle = w.shirt;
     ctx.beginPath();
-    ctx.ellipse(cx, y, 7, 9, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, y, 8, 4.5, sway, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#7f9dc9";
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // head with hair
+    ctx.fillStyle = w.skin;
     ctx.beginPath();
-    ctx.arc(cx, y - 3, 4, 0, Math.PI * 2);
+    ctx.arc(cx, y, 3.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = w.hair;
+    ctx.beginPath();
+    ctx.arc(cx, y - 0.8, 2.9, Math.PI, Math.PI * 2); // hair toward the nose
     ctx.fill();
   });
 }
