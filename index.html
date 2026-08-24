@@ -86,9 +86,9 @@ body {
   border-radius: 14px;
   border: 1px solid #26344a;
   background: #0d141d;
-  display: flex;
-  justify-content: center;
-  overflow: hidden;
+  height: 520px;
+  max-height: 58vh;
+  overflow: hidden; /* camera-follow sets scrollTop; the player never scrolls */
 }
 
 canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
@@ -371,16 +371,16 @@ const FLEET = [
       "Short cabin — the line reaches the tail fast",
     ],
     oversizedChance: 0.32,
-    sweepSeconds: 58,
+    sweepSeconds: 105,
     maxBagSize: 3,
-    cabinHeight: 470,
+    cabinHeight: 1040,
     targetPacked: 45,
     layout: [
       { type: "bins", capacities: [1, 2], width: 58 },
       { type: "seats", width: 22 },
       { type: "aisle", width: 58 },
       { type: "seats", width: 22 },
-      { type: "bins", capacities: [3, 4], width: 88 },
+      { type: "bins", capacities: [2, 3, 4], width: 88 },
     ],
   },
   {
@@ -394,9 +394,9 @@ const FLEET = [
       "About 1 in 6 bags needs a pink tag",
     ],
     oversizedChance: 0.16,
-    sweepSeconds: 70,
+    sweepSeconds: 150,
     maxBagSize: 3,
-    cabinHeight: 560,
+    cabinHeight: 1560,
     targetPacked: 55,
     layout: [
       { type: "bins", capacities: [3, 4, 5, 6], width: 96 },
@@ -418,9 +418,9 @@ const FLEET = [
       "Big bags are common",
     ],
     oversizedChance: 0.2,
-    sweepSeconds: 78,
+    sweepSeconds: 175,
     maxBagSize: 3,
-    cabinHeight: 700,
+    cabinHeight: 1860,
     targetPacked: 58,
     layout: [
       { type: "bins", capacities: [4, 5, 6], width: 96 },
@@ -442,9 +442,9 @@ const FLEET = [
       "Deep centre bins reward latching",
     ],
     oversizedChance: 0.18,
-    sweepSeconds: 82,
+    sweepSeconds: 170,
     maxBagSize: 3,
-    cabinHeight: 620,
+    cabinHeight: 1700,
     targetPacked: 55,
     layout: [
       { type: "bins", capacities: [3, 4, 5], width: 72 },
@@ -465,6 +465,7 @@ const canvas = document.getElementById("cabin");
 const ctx = canvas.getContext("2d");
 
 const el = (id) => document.getElementById(id);
+const canvasWrapEl = el("canvasWrap");
 const tailNumEl = el("tailNum");
 const tailTypeEl = el("tailType");
 const tailLevelEl = el("tailLevel");
@@ -593,6 +594,7 @@ function startLevel(levelIndex) {
     totalSections,
     current: null,
     sweepY: cabin.cabinTop,
+    holdT: 6, // pre-boarding grace: the line waits at the door
     score: 0,
     stowed: 0,
     closed: 0,
@@ -742,6 +744,7 @@ function packedPercent() {
 }
 
 function tick(dt) {
+  if (state.holdT > 0) { state.holdT -= dt; return; }
   const { cabinTop, cabinBottom } = state.cabin;
   const span = cabinBottom - cabinTop;
   const progress = (state.sweepY - cabinTop) / span;
@@ -976,9 +979,11 @@ function drawSuitcase(bin, bag, x, w) {
 function drawWalkers() {
   const now = performance.now();
   const { cabinTop } = state.cabin;
+  const boardedLen = Math.max(state.sweepY - cabinTop, 24);
+  const walkDur = 2000 + boardedLen * 9; // constant walking speed, any cabin length
   state.walkers.forEach((w) => {
-    const t = (now / 2600 + w.phase) % 1;
-    const y = cabinTop + t * Math.max(state.sweepY - cabinTop, 24);
+    const t = (now / walkDur + w.phase) % 1;
+    const y = cabinTop + t * boardedLen;
     const stride = now / 170 + w.phase * 10;
     const cx = w.aisle.x + w.aisle.width / 2 + Math.sin(stride / 2) * 2.5;
     const sway = Math.sin(stride) * 0.12;   // shoulder rotation while walking
@@ -1045,6 +1050,14 @@ function drawSweep() {
   ctx.moveTo(WING_PAD + 6, sy);
   ctx.lineTo(width - WING_PAD - 6, sy);
   ctx.stroke();
+
+  if (state.holdT > 0) {
+    ctx.fillStyle = "#4fc3f7";
+    ctx.font = "600 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`Boarding begins in ${Math.ceil(state.holdT)}… stow ahead!`, width / 2, sy + 18);
+    ctx.textAlign = "left";
+  }
 }
 
 function draw() {
@@ -1101,6 +1114,14 @@ function updateHUD() {
   });
 }
 
+function updateCamera() {
+  const scale = canvas.clientWidth / state.cabin.width;
+  const view = canvasWrapEl.clientHeight;
+  const cssH = state.cabin.height * scale;
+  const target = state.sweepY * scale - view * 0.42;
+  canvasWrapEl.scrollTop = Math.max(0, Math.min(cssH - view, target));
+}
+
 function loop(now) {
   if (!state.over) {
     const dt = (now - state.lastTick) / 1000;
@@ -1109,6 +1130,7 @@ function loop(now) {
   }
   draw();
   updateHUD();
+  updateCamera();
   if (!state.over) requestAnimationFrame(loop);
 }
 
