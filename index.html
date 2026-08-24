@@ -19,24 +19,33 @@ body {
   gap: 10px;
 }
 
+.panel {
+  width: 100%;
+  max-width: 460px;
+  background: #17212e;
+  border: 1px solid #26344a;
+  border-radius: 10px;
+}
+
+#tailStrip {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 14px;
+}
+
+#tailNum { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+#tailType { font-size: 11px; color: #8fa2bd; }
+#tailLevel { margin-left: auto; font-size: 10px; color: #8fa2bd; text-transform: uppercase; letter-spacing: 0.05em; }
+
 #hud {
   display: flex;
   gap: 10px;
-  background: #17212e;
   padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid #26344a;
-  width: 100%;
-  max-width: 420px;
   justify-content: space-between;
 }
 
-#hud .stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 44px;
-}
+#hud .stat { display: flex; flex-direction: column; align-items: center; min-width: 44px; }
 
 #hud .label {
   font-size: 9px;
@@ -46,12 +55,9 @@ body {
   white-space: nowrap;
 }
 
-#hud span:not(.label) {
-  font-size: 17px;
-  font-weight: 700;
-}
+#hud span:not(.label) { font-size: 17px; font-weight: 700; }
 
-#progressWrap { width: 100%; max-width: 420px; }
+#progressWrap { width: 100%; max-width: 460px; }
 
 #progressLabel {
   display: flex;
@@ -72,34 +78,22 @@ body {
   border: 1px solid #26344a;
 }
 
-#progressFill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, #4caf7d, #ffb74d, #ff6b6b);
-}
+#progressFill { height: 100%; width: 0%; background: linear-gradient(90deg, #4caf7d, #ffb74d, #ff6b6b); }
 
 #canvasWrap {
   width: 100%;
-  max-width: 420px;
-  overflow-x: auto;
+  max-width: 460px;
   border-radius: 14px;
   border: 1px solid #26344a;
   background: #0d141d;
-}
-
-canvas { display: block; margin: 0 auto; touch-action: manipulation; }
-
-#bagPanel {
-  width: 100%;
-  max-width: 420px;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #17212e;
-  border: 1px solid #26344a;
-  border-radius: 10px;
-  padding: 10px 14px;
+  justify-content: center;
+  overflow: hidden;
 }
+
+canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
+
+#bagPanel { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
 
 #bagPreview {
   width: 34px;
@@ -111,11 +105,8 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
 }
 
 #bagInfo { flex: 1; min-width: 0; }
-
 #bagLabel { font-size: 13px; color: #e8edf4; font-weight: 600; }
-
 #bagSub { font-size: 11px; color: #8fa2bd; margin-top: 2px; }
-
 #bagSub.warn { color: #ff8fb0; font-weight: 600; }
 
 #gateCheckBtn {
@@ -130,22 +121,10 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
   flex-shrink: 0;
 }
 
-#gateCheckBtn.pulse {
-  background: #ff6b95;
-  color: #2a0d18;
-  border-color: #ff6b95;
-}
-
+#gateCheckBtn.pulse { background: #ff6b95; color: #2a0d18; border-color: #ff6b95; }
 #gateCheckBtn:disabled { opacity: 0.35; cursor: default; }
 
-#queueArea {
-  width: 100%;
-  max-width: 420px;
-  background: #17212e;
-  border: 1px solid #26344a;
-  border-radius: 10px;
-  padding: 8px 14px;
-}
+#queueArea { padding: 8px 14px; }
 
 #queueArea .label {
   font-size: 10px;
@@ -155,20 +134,8 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
   margin-bottom: 5px;
 }
 
-#queueRow {
-  display: flex;
-  gap: 6px;
-  min-height: 26px;
-  overflow-x: auto;
-  align-items: flex-end;
-}
-
-.queueBag {
-  width: 18px;
-  border-radius: 3px;
-  background: #3a4a63;
-  flex-shrink: 0;
-}
+#queueRow { display: flex; gap: 6px; min-height: 26px; overflow-x: auto; align-items: flex-end; }
+.queueBag { width: 18px; border-radius: 3px; background: #3a4a63; flex-shrink: 0; }
 
 #toast {
   position: fixed;
@@ -191,11 +158,12 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
 #overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 10, 15, 0.88);
+  background: rgba(6, 10, 15, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 18px;
+  overflow-y: auto;
 }
 
 #overlay.hidden { display: none; }
@@ -204,16 +172,42 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
   background: #17212e;
   border: 1px solid #26344a;
   border-radius: 14px;
-  padding: 28px 32px;
+  padding: 24px 26px;
   text-align: center;
-  max-width: 380px;
+  max-width: 400px;
+  width: 100%;
 }
 
-#overlayCard h1 { margin-top: 0; font-size: 22px; }
-#overlayCard p { font-size: 14px; line-height: 1.6; color: #c3d0e2; }
+#overlayTag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #4fc3f7;
+}
 
-#restartBtn {
-  margin-top: 10px;
+#overlayCard h1 { margin: 6px 0 4px; font-size: 21px; }
+#overlayCard p { font-size: 13.5px; line-height: 1.6; color: #c3d0e2; margin: 10px 0; }
+
+#quirkList {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  text-align: left;
+  font-size: 12.5px;
+  color: #c3d0e2;
+}
+
+#quirkList li {
+  padding: 6px 10px;
+  background: #1c2733;
+  border-left: 3px solid #4fc3f7;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.btnRow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+
+button.primary {
   background: #2f6fed;
   color: white;
   border: none;
@@ -223,15 +217,57 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
   cursor: pointer;
 }
 
-#restartBtn:hover { background: #4a83f5; }
+button.primary:hover { background: #4a83f5; }
+
+button.ghost {
+  background: transparent;
+  color: #8fa2bd;
+  border: 1px solid #2f3f56;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+button.ghost:hover { color: #e8edf4; border-color: #4a5f7f; }
+
+#fleetList { margin: 14px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+
+.fleetBtn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1c2733;
+  border: 1px solid #2f3f56;
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  color: #e8edf4;
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+}
+
+.fleetBtn:hover:not(:disabled) { border-color: #4fc3f7; }
+.fleetBtn:disabled { opacity: 0.4; cursor: default; }
+.fleetBtn .fname { font-weight: 600; }
+.fleetBtn .fsub { font-size: 11px; color: #8fa2bd; margin-left: auto; }
+.fleetBtn.done { border-left: 3px solid #4caf7d; }
 </style>
 </head>
 <body>
-  <div id="hud">
+  <div class="panel" id="tailStrip">
+    <span id="tailNum">—</span>
+    <span id="tailType"></span>
+    <span id="tailLevel"></span>
+  </div>
+
+  <div class="panel" id="hud">
     <div class="stat"><span class="label">Score</span><span id="score">0</span></div>
     <div class="stat"><span class="label">Stowed</span><span id="stowedCount">0</span></div>
-    <div class="stat"><span class="label">Closed</span><span id="closedCount">0</span></div>
+    <div class="stat"><span class="label">Latched</span><span id="closedCount">0</span></div>
     <div class="stat"><span class="label">Pink Tag</span><span id="oversizedCount">0</span></div>
+    <div class="stat"><span class="label">Packed</span><span id="packedPct">0%</span></div>
   </div>
 
   <div id="progressWrap">
@@ -239,11 +275,9 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
     <div id="progressBar"><div id="progressFill"></div></div>
   </div>
 
-  <div id="canvasWrap">
-    <canvas id="cabin"></canvas>
-  </div>
+  <div id="canvasWrap"><canvas id="cabin"></canvas></div>
 
-  <div id="bagPanel">
+  <div class="panel" id="bagPanel">
     <div id="bagPreview"></div>
     <div id="bagInfo">
       <div id="bagLabel">Waiting for boarding...</div>
@@ -252,54 +286,49 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
     <button id="gateCheckBtn">Pink tag<br>(gate-check)</button>
   </div>
 
-  <div id="queueArea">
+  <div class="panel" id="queueArea">
     <div class="label">Next in the aisle</div>
     <div id="queueRow"></div>
   </div>
 
   <div id="toast"></div>
 
-  <div id="overlay" class="hidden">
+  <div id="overlay">
     <div id="overlayCard">
+      <div id="overlayTag"></div>
       <h1 id="overlayTitle"></h1>
       <p id="overlayBody"></p>
-      <button id="restartBtn">Board Next Flight</button>
+      <ul id="quirkList"></ul>
+      <div id="fleetList"></div>
+      <div class="btnRow" id="overlayButtons"></div>
     </div>
   </div>
 
   <script>
+// ---------------------------------------------------------------------------
 // Overhead Bin: Boarding Rush
 //
-// Top-down cabin. Overhead bins run lengthwise along the fuselage — a
-// continuous run of bins down each side of the aisle, their sections
-// stacked nose-to-tail the way real bins are. Passengers stream aft and a
-// boarding "front" sweeps down with them; any bin section the front has
-// already passed is out of reach for good, so empty space left up front is
-// wasted. Some bags are secretly oversized and only reveal it when you try
-// to stow them — those need a pink tag. Fill a bin and latch it shut
-// before the line passes it for a bonus.
+// Top-down cabin. Overhead bins run lengthwise along the fuselage. Passengers
+// stream aft and a boarding "front" sweeps down with them; any bin section the
+// front has passed is out of reach for good, so empty space left forward is
+// wasted. Some bags are secretly oversized and only reveal it when you try to
+// stow them — those need a pink tag. Fill a bin and latch it shut before the
+// line passes for a bonus.
+//
+// Cabins are data-driven: an aircraft spec lists columns across the fuselage
+// (bin runs, seat blocks, aisles), so a cramped regional jet and a twin-aisle
+// widebody with centre bins are the same code with different specs.
+// ---------------------------------------------------------------------------
 
-const CELL_H = 22;          // one bin section, measured along the fuselage
+const CELL_H = 22;        // one bin section, measured along the fuselage
 const CELL_GAP = 3;
 const BIN_PAD = 5;
-const BIN_GAP = 11;         // gap between adjacent bins along the length
-const BIN_W = 100;          // bin depth, across the fuselage
-const SEAT_STRIP = 26;
-const AISLE_W = 60;
-const SIDE_PAD = 18;
+const BIN_GAP = 11;       // gap between adjacent bins along the length
+const SIDE_PAD = 16;
 const TOP_MARGIN = 34;
 const BOTTOM_MARGIN = 34;
 
-const CAPACITY_CHOICES = [3, 4, 5, 6];
 const BAG_COLORS = ["#ff8a65", "#ffd54f", "#4fc3f7", "#81c784", "#ba68c8", "#f06292"];
-const OVERSIZED_CHANCE = 0.16;
-const QUEUE_LENGTH = 70;
-const SWEEP_SECONDS = 70;   // nose-to-tail at base speed, before ramp
-
-const CANVAS_W = SIDE_PAD * 2 + BIN_W * 2 + SEAT_STRIP * 2 + AISLE_W;
-const CANVAS_H = 560;
-const CABIN_TOP = TOP_MARGIN;
-const CABIN_BOTTOM = CANVAS_H - BOTTOM_MARGIN;
 
 const SCORE = {
   placeBase: 6,
@@ -310,110 +339,257 @@ const SCORE = {
   wrongGateCheck: -3,
 };
 
+// Column kinds: "bins" (a lengthwise run of overhead bins), "seats" (decor,
+// for orientation), "aisle" (where the queue walks).
+const FLEET = [
+  {
+    id: "crj200",
+    tail: "N417RG",
+    name: "CRJ-200",
+    type: "Regional Jet · 50 seats",
+    brief: "The bins on the left side are barely deep enough for a coat, and this crowd is hauling rollaboards that were never going to fit.",
+    quirks: [
+      "Left bins hold only 1–2 sections",
+      "Nearly a third of bags need a pink tag",
+      "Short cabin — the line reaches the tail fast",
+    ],
+    oversizedChance: 0.32,
+    sweepSeconds: 58,
+    maxBagSize: 3,
+    cabinHeight: 470,
+    targetPacked: 45,
+    layout: [
+      { type: "bins", capacities: [1, 2], width: 58 },
+      { type: "seats", width: 22 },
+      { type: "aisle", width: 58 },
+      { type: "seats", width: 22 },
+      { type: "bins", capacities: [3, 4], width: 88 },
+    ],
+  },
+  {
+    id: "a320",
+    tail: "N228JB",
+    name: "A320",
+    type: "Narrowbody · 180 seats",
+    brief: "A standard single-aisle cabin with even bins down both sides. Good place to learn the rhythm of the boarding front.",
+    quirks: [
+      "Even bins, 3–6 sections each",
+      "About 1 in 6 bags needs a pink tag",
+    ],
+    oversizedChance: 0.16,
+    sweepSeconds: 70,
+    maxBagSize: 3,
+    cabinHeight: 560,
+    targetPacked: 55,
+    layout: [
+      { type: "bins", capacities: [3, 4, 5, 6], width: 96 },
+      { type: "seats", width: 24 },
+      { type: "aisle", width: 58 },
+      { type: "seats", width: 24 },
+      { type: "bins", capacities: [3, 4, 5, 6], width: 96 },
+    ],
+  },
+  {
+    id: "b739",
+    tail: "N841DN",
+    name: "737-900ER",
+    type: "Stretched Narrowbody · 215 seats",
+    brief: "A long tube with a full load. The bins are generous, but the line keeps moving and the tail is a long way back.",
+    quirks: [
+      "Long cabin — lots of bins to keep ahead of",
+      "Boarding front accelerates hard late",
+      "Big bags are common",
+    ],
+    oversizedChance: 0.2,
+    sweepSeconds: 78,
+    maxBagSize: 3,
+    cabinHeight: 700,
+    targetPacked: 58,
+    layout: [
+      { type: "bins", capacities: [4, 5, 6], width: 96 },
+      { type: "seats", width: 24 },
+      { type: "aisle", width: 58 },
+      { type: "seats", width: 24 },
+      { type: "bins", capacities: [4, 5, 6], width: 96 },
+    ],
+  },
+  {
+    id: "b77w",
+    tail: "N862AA",
+    name: "777-300ER",
+    type: "Widebody · Twin aisle · 304 seats",
+    brief: "Two aisles, four runs of bins. The centre bins are the deepest on the aircraft but they are also the easiest to forget about until the line has already gone by.",
+    quirks: [
+      "Twin aisle — two queues board at once",
+      "Two centre bin runs plus both sides",
+      "Deep centre bins reward latching",
+    ],
+    oversizedChance: 0.18,
+    sweepSeconds: 82,
+    maxBagSize: 3,
+    cabinHeight: 620,
+    targetPacked: 55,
+    layout: [
+      { type: "bins", capacities: [3, 4, 5], width: 72 },
+      { type: "seats", width: 18 },
+      { type: "aisle", width: 46 },
+      { type: "seats", width: 18 },
+      { type: "bins", capacities: [4, 5, 6], width: 76 },
+      { type: "bins", capacities: [4, 5, 6], width: 76 },
+      { type: "seats", width: 18 },
+      { type: "aisle", width: 46 },
+      { type: "seats", width: 18 },
+      { type: "bins", capacities: [3, 4, 5], width: 72 },
+    ],
+  },
+];
+
 const canvas = document.getElementById("cabin");
-canvas.width = CANVAS_W;
-canvas.height = CANVAS_H;
 const ctx = canvas.getContext("2d");
 
-const scoreEl = document.getElementById("score");
-const stowedEl = document.getElementById("stowedCount");
-const closedEl = document.getElementById("closedCount");
-const oversizedEl = document.getElementById("oversizedCount");
-const progressFillEl = document.getElementById("progressFill");
-const bagPreviewEl = document.getElementById("bagPreview");
-const bagLabelEl = document.getElementById("bagLabel");
-const bagSubEl = document.getElementById("bagSub");
-const gateCheckBtn = document.getElementById("gateCheckBtn");
-const queueRowEl = document.getElementById("queueRow");
-const toastEl = document.getElementById("toast");
-const overlayEl = document.getElementById("overlay");
-const overlayTitleEl = document.getElementById("overlayTitle");
-const overlayBodyEl = document.getElementById("overlayBody");
-const restartBtn = document.getElementById("restartBtn");
+const el = (id) => document.getElementById(id);
+const tailNumEl = el("tailNum");
+const tailTypeEl = el("tailType");
+const tailLevelEl = el("tailLevel");
+const scoreEl = el("score");
+const stowedEl = el("stowedCount");
+const closedEl = el("closedCount");
+const oversizedEl = el("oversizedCount");
+const packedEl = el("packedPct");
+const progressFillEl = el("progressFill");
+const bagPreviewEl = el("bagPreview");
+const bagLabelEl = el("bagLabel");
+const bagSubEl = el("bagSub");
+const gateCheckBtn = el("gateCheckBtn");
+const queueRowEl = el("queueRow");
+const toastEl = el("toast");
+const overlayEl = el("overlay");
+const overlayTagEl = el("overlayTag");
+const overlayTitleEl = el("overlayTitle");
+const overlayBodyEl = el("overlayBody");
+const quirkListEl = el("quirkList");
+const fleetListEl = el("fleetList");
+const overlayButtonsEl = el("overlayButtons");
 
-let state;
+let state = null;
 let toastTimer = null;
+let careerScore = 0;
+let unlocked = 1;
 
-function binX(side) {
-  return side === "left" ? SIDE_PAD : CANVAS_W - SIDE_PAD - BIN_W;
+// --- persistence (best effort; private windows and blocked storage are fine) --
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem("cabinpuzzle.progress");
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (typeof data.unlocked === "number") unlocked = Math.max(1, Math.min(FLEET.length, data.unlocked));
+    if (typeof data.careerScore === "number") careerScore = data.careerScore;
+  } catch (e) { /* storage unavailable — start fresh */ }
 }
+
+function saveProgress() {
+  try {
+    localStorage.setItem("cabinpuzzle.progress", JSON.stringify({ unlocked, careerScore }));
+  } catch (e) { /* storage unavailable — progress is session-only */ }
+}
+
+// --- cabin construction ------------------------------------------------------
 
 function binHeightFor(capacity) {
   return BIN_PAD * 2 + capacity * (CELL_H + CELL_GAP) - CELL_GAP;
 }
 
-function cellY(bin, i) {
-  return bin.y + BIN_PAD + i * (CELL_H + CELL_GAP);
-}
-
-// A section is out of reach once the boarding front has moved past its
-// aft edge — the crowd has pushed by and nobody can get back to it.
-function cellLocked(bin, i) {
-  return state.sweepY > cellY(bin, i) + CELL_H;
-}
-
-function binFullyPassed(bin) {
-  return state.sweepY > bin.y + bin.height;
-}
-
-function isFull(bin) {
-  return bin.cells.every((c) => c !== null);
-}
-
-// Lay a run of bins down one side, nose to tail, until the cabin runs out.
-function makeBinRun(side) {
+// Walk the spec's columns left to right, assigning x positions and filling each
+// bin column with a run of bins from nose to tail.
+function buildCabin(spec) {
+  const cabinTop = TOP_MARGIN;
+  const cabinBottom = spec.cabinHeight - BOTTOM_MARGIN;
+  const columns = [];
+  const aisles = [];
+  const seatBlocks = [];
   const bins = [];
-  let y = CABIN_TOP;
-  const minHeight = binHeightFor(Math.min(...CAPACITY_CHOICES));
-  while (y + minHeight <= CABIN_BOTTOM) {
-    const fits = CAPACITY_CHOICES.filter((c) => y + binHeightFor(c) <= CABIN_BOTTOM);
-    const capacity = fits[Math.floor(Math.random() * fits.length)];
-    const height = binHeightFor(capacity);
-    bins.push({
-      side,
-      capacity,
-      cells: new Array(capacity).fill(null),
-      y,
-      height,
-      closed: false,
-      flashUntil: 0,
-      flashColor: null,
-    });
-    y += height + BIN_GAP;
-  }
-  return bins;
+
+  let x = SIDE_PAD;
+  spec.layout.forEach((slot) => {
+    if (slot.type === "bins") {
+      const column = { x, width: slot.width };
+      columns.push(column);
+      const minHeight = binHeightFor(Math.min(...slot.capacities));
+      let y = cabinTop;
+      while (y + minHeight <= cabinBottom) {
+        const fits = slot.capacities.filter((c) => y + binHeightFor(c) <= cabinBottom);
+        const capacity = fits[Math.floor(Math.random() * fits.length)];
+        const height = binHeightFor(capacity);
+        bins.push({
+          column, capacity, y, height,
+          cells: new Array(capacity).fill(null),
+          closed: false,
+          flashUntil: 0,
+          flashColor: null,
+        });
+        y += height + BIN_GAP;
+      }
+    } else if (slot.type === "aisle") {
+      aisles.push({ x, width: slot.width });
+    } else {
+      seatBlocks.push({ x, width: slot.width });
+    }
+    x += slot.width;
+  });
+
+  return {
+    width: x + SIDE_PAD,
+    height: spec.cabinHeight,
+    cabinTop, cabinBottom,
+    columns, aisles, seatBlocks, bins,
+  };
 }
 
-function makeBag(index) {
-  const difficulty = Math.min(1, index / (QUEUE_LENGTH * 0.7));
-  const size = 1 + Math.floor(Math.random() * (difficulty > 0.4 ? 3 : 2.5));
+function makeBag(spec, index, total) {
+  const difficulty = Math.min(1, index / (total * 0.7));
+  const size = 1 + Math.floor(Math.random() * (difficulty > 0.4 ? spec.maxBagSize : spec.maxBagSize - 0.5));
   return {
-    size: Math.min(size, 3),
+    size: Math.min(size, spec.maxBagSize),
     color: BAG_COLORS[Math.floor(Math.random() * BAG_COLORS.length)],
-    oversized: Math.random() < OVERSIZED_CHANCE,
+    oversized: Math.random() < spec.oversizedChance,
     revealed: false,
   };
 }
 
-function newGame() {
+function startLevel(levelIndex) {
+  const spec = FLEET[levelIndex];
+  const cabin = buildCabin(spec);
+
+  canvas.width = cabin.width;
+  canvas.height = cabin.height;
+  // Never upscale past native resolution; narrower screens scale it down.
+  canvas.style.maxWidth = cabin.width + "px";
+
+  const totalSections = cabin.bins.reduce((sum, b) => sum + b.capacity, 0);
+  const queueLength = Math.ceil(totalSections / 1.4);
   const queue = [];
-  for (let i = 0; i < QUEUE_LENGTH; i++) queue.push(makeBag(i));
+  for (let i = 0; i < queueLength; i++) queue.push(makeBag(spec, i, queueLength));
 
   state = {
-    bins: [...makeBinRun("left"), ...makeBinRun("right")],
-    queue,
+    spec, cabin, levelIndex, queue,
+    totalSections,
     current: null,
-    sweepY: CABIN_TOP,
+    sweepY: cabin.cabinTop,
     score: 0,
     stowed: 0,
     closed: 0,
     oversizedHandled: 0,
     lastTick: performance.now(),
     over: false,
-    walkers: [0.05, 0.3, 0.55, 0.78].map((phase) => ({ phase })),
+    walkers: cabin.aisles.flatMap((aisle) =>
+      [0.05, 0.3, 0.55, 0.78].map((phase) => ({ aisle, phase }))
+    ),
   };
 
   pullNextBag();
+  tailNumEl.textContent = spec.tail;
+  tailTypeEl.textContent = spec.name + " · " + spec.type;
+  tailLevelEl.textContent = `Level ${levelIndex + 1} of ${FLEET.length}`;
   overlayEl.classList.add("hidden");
   requestAnimationFrame(loop);
 }
@@ -427,6 +603,26 @@ function showToast(msg) {
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1400);
+}
+
+// --- reachability & placement ------------------------------------------------
+
+function cellY(bin, i) {
+  return bin.y + BIN_PAD + i * (CELL_H + CELL_GAP);
+}
+
+// A section is out of reach once the boarding front has moved past its aft
+// edge — the crowd has pushed by and nobody can get back to it.
+function cellLocked(bin, i) {
+  return state.sweepY > cellY(bin, i) + CELL_H;
+}
+
+function binFullyPassed(bin) {
+  return state.sweepY > bin.y + bin.height;
+}
+
+function isFull(bin) {
+  return bin.cells.every((c) => c !== null);
 }
 
 // First run of `len` adjacent sections that are both empty and still reachable.
@@ -513,31 +709,22 @@ function gateCheck() {
   pullNextBag();
 }
 
+function packedPercent() {
+  const filled = state.cabin.bins.reduce(
+    (sum, b) => sum + b.cells.filter((c) => c !== null).length, 0);
+  return Math.round((filled / state.totalSections) * 100);
+}
+
 function tick(dt) {
-  const span = CABIN_BOTTOM - CABIN_TOP;
-  const progress = (state.sweepY - CABIN_TOP) / span;
-  const speed = (span / SWEEP_SECONDS) * (1 + 1.5 * progress);
+  const { cabinTop, cabinBottom } = state.cabin;
+  const span = cabinBottom - cabinTop;
+  const progress = (state.sweepY - cabinTop) / span;
+  const speed = (span / state.spec.sweepSeconds) * (1 + 1.5 * progress);
   state.sweepY += speed * dt;
-
-  if (state.sweepY >= CABIN_BOTTOM && !state.over) endGame();
+  if (state.sweepY >= cabinBottom && !state.over) endLevel();
 }
 
-function endGame() {
-  state.over = true;
-  overlayEl.classList.remove("hidden");
-  let filled = 0;
-  let total = 0;
-  state.bins.forEach((bin) => {
-    total += bin.capacity;
-    filled += bin.cells.filter((c) => c !== null).length;
-  });
-  const efficiency = Math.round((filled / total) * 100);
-  overlayTitleEl.textContent = "Doors closing!";
-  overlayBodyEl.textContent =
-    `Stowed ${state.stowed} bags, latched ${state.closed} bins, pink-tagged ` +
-    `${state.oversizedHandled} oversized bags. The cabin ended ${efficiency}% packed. ` +
-    `Final score: ${state.score}.`;
-}
+// --- drawing -----------------------------------------------------------------
 
 function roundRect(c, x, y, w, h, r) {
   c.beginPath();
@@ -549,39 +736,51 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
-function drawFuselage() {
+function drawCabinShell() {
+  const { width, height, cabinTop, cabinBottom, aisles, seatBlocks } = state.cabin;
+  const radius = Math.min(46, width * 0.16);
+
   ctx.fillStyle = "#111a25";
-  roundRect(ctx, 4, 6, CANVAS_W - 8, CANVAS_H - 12, 46);
+  roundRect(ctx, 4, 6, width - 8, height - 12, radius);
   ctx.fill();
   ctx.strokeStyle = "#243348";
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // aisle
-  const ax = CANVAS_W / 2 - AISLE_W / 2;
-  ctx.fillStyle = "#0a1119";
-  ctx.fillRect(ax, 10, AISLE_W, CANVAS_H - 20);
-  ctx.strokeStyle = "#1e2b3d";
-  ctx.setLineDash([5, 9]);
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(CANVAS_W / 2, 14);
-  ctx.lineTo(CANVAS_W / 2, CANVAS_H - 14);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  aisles.forEach((aisle) => {
+    ctx.fillStyle = "#0a1119";
+    ctx.fillRect(aisle.x, 10, aisle.width, height - 20);
+    ctx.strokeStyle = "#1e2b3d";
+    ctx.setLineDash([5, 9]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(aisle.x + aisle.width / 2, 14);
+    ctx.lineTo(aisle.x + aisle.width / 2, height - 14);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
 
-  // seat rows between the bins and the aisle, for orientation
-  ctx.fillStyle = "#18222f";
-  for (let y = CABIN_TOP; y < CABIN_BOTTOM - 12; y += 30) {
-    [SIDE_PAD + BIN_W + 4, CANVAS_W - SIDE_PAD - BIN_W - SEAT_STRIP + 4].forEach((sx) => {
-      roundRect(ctx, sx, y, SEAT_STRIP - 8, 22, 4);
+  ctx.fillStyle = "#1e2a3a";
+  seatBlocks.forEach((block) => {
+    for (let y = cabinTop; y < cabinBottom - 12; y += 30) {
+      roundRect(ctx, block.x + 3, y, block.width - 6, 22, 4);
       ctx.fill();
-    });
+    }
+  });
+
+  // cabin windows down both sides — sells the fuselage at a glance
+  ctx.fillStyle = "#2b3d55";
+  for (let y = cabinTop + 6; y < cabinBottom - 10; y += 34) {
+    roundRect(ctx, 7, y, 5, 14, 2.5);
+    ctx.fill();
+    roundRect(ctx, width - 12, y, 5, 14, 2.5);
+    ctx.fill();
   }
 }
 
 function drawBin(bin) {
-  const x = binX(bin.side);
+  const x = bin.column.x;
+  const w = bin.column.width;
   const now = performance.now();
   const flashing = now < bin.flashUntil;
   const passed = binFullyPassed(bin);
@@ -595,12 +794,12 @@ function drawBin(bin) {
   ctx.fillStyle = fillStyle;
   ctx.strokeStyle = strokeStyle;
   ctx.lineWidth = bin.closed ? 3 : 2;
-  roundRect(ctx, x, bin.y, BIN_W, bin.height, 9);
+  roundRect(ctx, x, bin.y, w, bin.height, 9);
   ctx.fill();
   ctx.stroke();
 
   const cellX = x + BIN_PAD;
-  const cellW = BIN_W - BIN_PAD * 2;
+  const cellW = w - BIN_PAD * 2;
   bin.cells.forEach((cell, i) => {
     const cy = cellY(bin, i);
     if (cell) {
@@ -630,46 +829,48 @@ function drawBin(bin) {
   if (bin.closed) {
     ctx.fillStyle = "#ffd54f";
     ctx.font = "12px sans-serif";
-    ctx.fillText("\u{1F512}", x + BIN_W / 2 - 6, bin.y + bin.height - 1);
+    ctx.fillText("\u{1F512}", x + w / 2 - 6, bin.y + bin.height - 1);
   }
 }
 
 function drawWalkers() {
   const now = performance.now();
+  const { cabinTop } = state.cabin;
   state.walkers.forEach((w) => {
     const t = (now / 2600 + w.phase) % 1;
-    const y = CABIN_TOP + t * Math.max(state.sweepY - CABIN_TOP, 24);
-    const bob = Math.sin(now / 190 + w.phase * 10) * 3;
+    const y = cabinTop + t * Math.max(state.sweepY - cabinTop, 24);
+    const cx = w.aisle.x + w.aisle.width / 2 + Math.sin(now / 190 + w.phase * 10) * 3;
     ctx.fillStyle = "#5b7ba8";
     ctx.beginPath();
-    ctx.ellipse(CANVAS_W / 2 + bob, y, 7, 9, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, y, 7, 9, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#7f9dc9";
     ctx.beginPath();
-    ctx.arc(CANVAS_W / 2 + bob, y - 3, 4, 0, Math.PI * 2);
+    ctx.arc(cx, y - 3, 4, 0, Math.PI * 2);
     ctx.fill();
   });
 }
 
 function drawSweep() {
-  const sy = Math.min(state.sweepY, CABIN_BOTTOM);
+  const { width, cabinBottom } = state.cabin;
+  const sy = Math.min(state.sweepY, cabinBottom);
   const grad = ctx.createLinearGradient(0, sy - 26, 0, sy + 4);
   grad.addColorStop(0, "rgba(79,195,247,0)");
   grad.addColorStop(1, "rgba(79,195,247,0.28)");
   ctx.fillStyle = grad;
-  ctx.fillRect(8, sy - 26, CANVAS_W - 16, 30);
+  ctx.fillRect(8, sy - 26, width - 16, 30);
   ctx.strokeStyle = "#4fc3f7";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(10, sy);
-  ctx.lineTo(CANVAS_W - 10, sy);
+  ctx.lineTo(width - 10, sy);
   ctx.stroke();
 }
 
 function draw() {
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-  drawFuselage();
-  state.bins.forEach(drawBin);
+  ctx.clearRect(0, 0, state.cabin.width, state.cabin.height);
+  drawCabinShell();
+  state.cabin.bins.forEach(drawBin);
   drawWalkers();
   drawSweep();
 }
@@ -679,8 +880,10 @@ function updateHUD() {
   stowedEl.textContent = state.stowed;
   closedEl.textContent = state.closed;
   oversizedEl.textContent = state.oversizedHandled;
+  packedEl.textContent = packedPercent() + "%";
 
-  const pct = Math.min(100, ((state.sweepY - CABIN_TOP) / (CABIN_BOTTOM - CABIN_TOP)) * 100);
+  const { cabinTop, cabinBottom } = state.cabin;
+  const pct = Math.min(100, ((state.sweepY - cabinTop) / (cabinBottom - cabinTop)) * 100);
   progressFillEl.style.width = `${pct}%`;
 
   if (state.current) {
@@ -709,11 +912,11 @@ function updateHUD() {
 
   queueRowEl.innerHTML = "";
   state.queue.slice(0, 14).forEach((b) => {
-    const el = document.createElement("div");
-    el.className = "queueBag";
-    el.style.height = `${b.size * 8 + 6}px`;
-    el.style.background = b.color;
-    queueRowEl.appendChild(el);
+    const item = document.createElement("div");
+    item.className = "queueBag";
+    item.style.height = `${b.size * 8 + 6}px`;
+    item.style.background = b.color;
+    queueRowEl.appendChild(item);
   });
 }
 
@@ -728,22 +931,112 @@ function loop(now) {
   if (!state.over) requestAnimationFrame(loop);
 }
 
-canvas.addEventListener("click", (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left) * (CANVAS_W / rect.width);
-  const y = (e.clientY - rect.top) * (CANVAS_H / rect.height);
+// --- overlays & level flow ---------------------------------------------------
 
-  const hit = state.bins.find((bin) => {
-    const bx = binX(bin.side);
-    return x >= bx && x <= bx + BIN_W && y >= bin.y && y <= bin.y + bin.height;
+function clearOverlay() {
+  quirkListEl.innerHTML = "";
+  fleetListEl.innerHTML = "";
+  overlayButtonsEl.innerHTML = "";
+  overlayBodyEl.textContent = "";
+}
+
+function addButton(label, cls, onClick) {
+  const b = document.createElement("button");
+  b.className = cls;
+  b.textContent = label;
+  b.addEventListener("click", onClick);
+  overlayButtonsEl.appendChild(b);
+  return b;
+}
+
+function showBriefing(levelIndex) {
+  const spec = FLEET[levelIndex];
+  clearOverlay();
+  overlayTagEl.textContent = `Level ${levelIndex + 1} · ${spec.tail}`;
+  overlayTitleEl.textContent = spec.name;
+  overlayBodyEl.textContent = spec.brief;
+  spec.quirks.forEach((q) => {
+    const li = document.createElement("li");
+    li.textContent = q;
+    quirkListEl.appendChild(li);
   });
+  const goal = document.createElement("li");
+  goal.style.borderLeftColor = "#4caf7d";
+  goal.textContent = `Goal: finish with the cabin at least ${spec.targetPacked}% packed`;
+  quirkListEl.appendChild(goal);
+
+  addButton("Begin boarding", "primary", () => startLevel(levelIndex));
+  if (FLEET.length > 1) addButton("Choose aircraft", "ghost", showFleetSelect);
+  overlayEl.classList.remove("hidden");
+}
+
+function showFleetSelect() {
+  clearOverlay();
+  overlayTagEl.textContent = "Fleet";
+  overlayTitleEl.textContent = "Choose an aircraft";
+  overlayBodyEl.textContent = `Career score: ${careerScore}`;
+  FLEET.forEach((spec, i) => {
+    const btn = document.createElement("button");
+    btn.className = "fleetBtn" + (i < unlocked - 1 ? " done" : "");
+    btn.disabled = i >= unlocked;
+    btn.innerHTML =
+      `<span class="fname">${spec.name}</span>` +
+      `<span class="fsub">${i >= unlocked ? "Locked" : spec.type}</span>`;
+    btn.addEventListener("click", () => showBriefing(i));
+    fleetListEl.appendChild(btn);
+  });
+  overlayEl.classList.remove("hidden");
+}
+
+function endLevel() {
+  state.over = true;
+  const packed = packedPercent();
+  const spec = state.spec;
+  const passed = packed >= spec.targetPacked;
+  careerScore += state.score;
+  if (passed && state.levelIndex + 1 >= unlocked) {
+    unlocked = Math.min(FLEET.length, state.levelIndex + 2);
+  }
+  saveProgress();
+
+  clearOverlay();
+  overlayTagEl.textContent = passed ? "Doors closed" : "Delayed departure";
+  overlayTitleEl.textContent = passed ? `${spec.name} dispatched` : `${spec.name} left space on the table`;
+  overlayBodyEl.textContent =
+    `Stowed ${state.stowed} bags, latched ${state.closed} bins and pink-tagged ` +
+    `${state.oversizedHandled} oversized bags. The cabin ended ${packed}% packed ` +
+    `(target ${spec.targetPacked}%). Score ${state.score} · career ${careerScore}.`;
+
+  const hasNext = state.levelIndex + 1 < FLEET.length;
+  if (passed && hasNext) {
+    addButton("Next aircraft", "primary", () => showBriefing(state.levelIndex + 1));
+  } else if (passed) {
+    addButton("Fly it again", "primary", () => showBriefing(state.levelIndex));
+  } else {
+    addButton("Try again", "primary", () => showBriefing(state.levelIndex));
+  }
+  addButton("Choose aircraft", "ghost", showFleetSelect);
+  overlayEl.classList.remove("hidden");
+}
+
+// --- input -------------------------------------------------------------------
+
+canvas.addEventListener("click", (e) => {
+  if (!state || state.over) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (state.cabin.width / rect.width);
+  const y = (e.clientY - rect.top) * (state.cabin.height / rect.height);
+
+  const hit = state.cabin.bins.find((bin) =>
+    x >= bin.column.x && x <= bin.column.x + bin.column.width &&
+    y >= bin.y && y <= bin.y + bin.height);
   if (hit) handleBinTap(hit);
 });
 
 gateCheckBtn.addEventListener("click", gateCheck);
-restartBtn.addEventListener("click", newGame);
 
-newGame();
+loadProgress();
+showBriefing(Math.min(unlocked - 1, FLEET.length - 1));
   </script>
 </body>
 </html>
