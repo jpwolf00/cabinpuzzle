@@ -266,8 +266,9 @@ button.ghost:hover { color: #e8edf4; border-color: #4a5f7f; }
 
 .fleetBtn:hover:not(:disabled) { border-color: #4fc3f7; }
 .fleetBtn:disabled { opacity: 0.4; cursor: default; }
-.fleetBtn .fname { font-weight: 600; }
-.fleetBtn .fsub { font-size: 11px; color: #8fa2bd; margin-left: auto; }
+.fleetBtn .fdiff { color: #4fc3f7; font-size: 11px; letter-spacing: 1px; }
+.fleetBtn .fname { font-weight: 600; white-space: nowrap; }
+.fleetBtn .fsub { font-size: 10.5px; color: #8fa2bd; margin-left: auto; text-align: right; line-height: 1.3; }
 .fleetBtn.done { border-left: 3px solid #4caf7d; }
 </style>
 </head>
@@ -370,11 +371,12 @@ const FLEET = [
       "Nearly a third of bags need a pink tag",
       "Short cabin — the line reaches the tail fast",
     ],
+    difficulty: 1,
     oversizedChance: 0.32,
-    sweepSeconds: 105,
+    sweepSeconds: 95,
     maxBagSize: 3,
     cabinHeight: 1040,
-    targetPacked: 45,
+    targetPacked: 70,
     layout: [
       { type: "bins", capacities: [1, 2], width: 58 },
       { type: "seats", width: 22 },
@@ -393,11 +395,12 @@ const FLEET = [
       "Even bins, 3–6 sections each",
       "About 1 in 6 bags needs a pink tag",
     ],
+    difficulty: 2,
     oversizedChance: 0.16,
-    sweepSeconds: 150,
+    sweepSeconds: 85,
     maxBagSize: 3,
     cabinHeight: 1560,
-    targetPacked: 55,
+    targetPacked: 68,
     layout: [
       { type: "bins", capacities: [3, 4, 5, 6], width: 96 },
       { type: "seats", width: 24 },
@@ -417,11 +420,12 @@ const FLEET = [
       "Boarding front accelerates hard late",
       "Big bags are common",
     ],
+    difficulty: 3,
     oversizedChance: 0.2,
-    sweepSeconds: 175,
+    sweepSeconds: 105,
     maxBagSize: 3,
     cabinHeight: 1860,
-    targetPacked: 58,
+    targetPacked: 68,
     layout: [
       { type: "bins", capacities: [4, 5, 6], width: 96 },
       { type: "seats", width: 24 },
@@ -441,11 +445,12 @@ const FLEET = [
       "Two centre bin runs plus both sides",
       "Deep centre bins reward latching",
     ],
+    difficulty: 4,
     oversizedChance: 0.18,
-    sweepSeconds: 170,
+    sweepSeconds: 180,
     maxBagSize: 3,
     cabinHeight: 1700,
-    targetPacked: 55,
+    targetPacked: 70,
     layout: [
       { type: "bins", capacities: [3, 4, 5], width: 72 },
       { type: "seats", width: 18 },
@@ -585,7 +590,12 @@ function startLevel(levelIndex) {
   canvas.style.maxWidth = cabin.width + "px";
 
   const totalSections = cabin.bins.reduce((sum, b) => sum + b.capacity, 0);
-  const queueLength = Math.ceil(totalSections / 1.4);
+  // Supply enough bags to overfill the cabin even after oversized ones are
+  // tagged out, so the limit on packing is the player's speed and judgement
+  // rather than running out of luggage. (~1.9 sections per stowable bag.)
+  const AVG_BAG_SECTIONS = 1.9;
+  const queueLength = Math.ceil(
+    (totalSections * 1.45) / (AVG_BAG_SECTIONS * (1 - spec.oversizedChance)));
   const queue = [];
   for (let i = 0; i < queueLength; i++) queue.push(makeBag(spec, i, queueLength));
 
@@ -1168,6 +1178,13 @@ function showBriefing(levelIndex) {
   goal.textContent = `Goal: finish with the cabin at least ${spec.targetPacked}% packed`;
   quirkListEl.appendChild(goal);
 
+  const diff = document.createElement("li");
+  diff.style.borderLeftColor = "#ffb74d";
+  const names = { 1: "Training flight", 2: "Routine turn", 3: "Tight turn", 4: "Peak season" };
+  diff.textContent = `Difficulty: ${names[spec.difficulty]} ` +
+    "\u25CF".repeat(spec.difficulty) + "\u25CB".repeat(4 - spec.difficulty);
+  quirkListEl.appendChild(diff);
+
   addButton("Begin boarding", "primary", () => startLevel(levelIndex));
   if (FLEET.length > 1) addButton("Choose aircraft", "ghost", showFleetSelect);
   overlayEl.classList.remove("hidden");
@@ -1182,7 +1199,9 @@ function showFleetSelect() {
     const btn = document.createElement("button");
     btn.className = "fleetBtn" + (i < unlocked - 1 ? " done" : "");
     btn.disabled = i >= unlocked;
+    const pips = "\u25CF".repeat(spec.difficulty) + "\u25CB".repeat(4 - spec.difficulty);
     btn.innerHTML =
+      `<span class="fdiff">${pips}</span>` +
       `<span class="fname">${spec.name}</span>` +
       `<span class="fsub">${i >= unlocked ? "Locked" : spec.type}</span>`;
     btn.addEventListener("click", () => showBriefing(i));
