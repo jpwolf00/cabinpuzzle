@@ -102,6 +102,22 @@ canvas { display: block; width: 100%; height: auto; touch-action: manipulation; 
   flex-shrink: 0;
   height: 26px;
   transition: background 0.15s, height 0.15s;
+  position: relative;
+  margin-top: 6px;
+}
+
+/* telescoping handle — makes the blocks read as luggage */
+#bagPreview::before, .queueBag::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 8px;
+  border: 2px solid rgba(200, 214, 232, 0.6);
+  border-bottom: none;
+  border-radius: 5px 5px 0 0;
 }
 
 #bagInfo { flex: 1; min-width: 0; }
@@ -134,8 +150,8 @@ canvas { display: block; width: 100%; height: auto; touch-action: manipulation; 
   margin-bottom: 5px;
 }
 
-#queueRow { display: flex; gap: 6px; min-height: 26px; overflow-x: auto; align-items: flex-end; }
-.queueBag { width: 18px; border-radius: 3px; background: #3a4a63; flex-shrink: 0; }
+#queueRow { display: flex; gap: 8px; min-height: 26px; overflow-x: auto; align-items: flex-end; padding-top: 8px; }
+.queueBag { width: 18px; border-radius: 3px; background: #3a4a63; flex-shrink: 0; position: relative; }
 
 #toast {
   position: fixed;
@@ -324,9 +340,10 @@ const CELL_H = 22;        // one bin section, measured along the fuselage
 const CELL_GAP = 3;
 const BIN_PAD = 5;
 const BIN_GAP = 11;       // gap between adjacent bins along the length
-const SIDE_PAD = 16;
-const TOP_MARGIN = 34;
-const BOTTOM_MARGIN = 34;
+const SIDE_PAD = 14;
+const WING_PAD = 34;      // exterior margin for wings and stabilizers
+const TOP_MARGIN = 64;    // room for the nose cone and cockpit
+const BOTTOM_MARGIN = 72; // room for the tail cone and fin
 
 const BAG_COLORS = ["#ff8a65", "#ffd54f", "#4fc3f7", "#81c784", "#ba68c8", "#f06292"];
 
@@ -509,7 +526,7 @@ function buildCabin(spec) {
   const seatBlocks = [];
   const bins = [];
 
-  let x = SIDE_PAD;
+  let x = WING_PAD + SIDE_PAD;
   spec.layout.forEach((slot) => {
     if (slot.type === "bins") {
       const column = { x, width: slot.width };
@@ -523,6 +540,7 @@ function buildCabin(spec) {
         bins.push({
           column, capacity, y, height,
           cells: new Array(capacity).fill(null),
+          bags: [],
           closed: false,
           flashUntil: 0,
           flashColor: null,
@@ -538,7 +556,7 @@ function buildCabin(spec) {
   });
 
   return {
-    width: x + SIDE_PAD,
+    width: x + SIDE_PAD + WING_PAD,
     height: spec.cabinHeight,
     cabinTop, cabinBottom,
     columns, aisles, seatBlocks, bins,
@@ -690,6 +708,7 @@ function handleBinTap(bin) {
   for (let i = start; i < start + state.current.size; i++) {
     bin.cells[i] = state.current.color;
   }
+  bin.bags.push({ start, size: state.current.size, color: state.current.color });
   state.score += SCORE.placeBase + SCORE.placePerSize * state.current.size;
   state.stowed += 1;
   flash(bin, "#4caf7d", 250);
@@ -738,24 +757,89 @@ function roundRect(c, x, y, w, h, r) {
 
 function drawCabinShell() {
   const { width, height, cabinTop, cabinBottom, aisles, seatBlocks } = state.cabin;
-  const radius = Math.min(46, width * 0.16);
+  const cx = width / 2;
+  const fx0 = WING_PAD;          // fuselage left edge
+  const fx1 = width - WING_PAD;  // fuselage right edge
+  const noseBase = 56;           // where the nose cone meets the straight body
+  const tailBase = height - 62;  // where the body starts tapering to the tail
 
-  ctx.fillStyle = "#111a25";
-  roundRect(ctx, 4, 6, width - 8, height - 12, radius);
-  ctx.fill();
+  // wings — swept trapezoids reaching the canvas edge
+  const wingY = cabinTop + (cabinBottom - cabinTop) * 0.38;
   ctx.strokeStyle = "#243348";
+  ctx.lineWidth = 2;
+  [[fx0 + 4, 2], [fx1 - 4, width - 2]].forEach(([rootX, tipX]) => {
+    ctx.fillStyle = "#152232";
+    ctx.beginPath();
+    ctx.moveTo(rootX, wingY);
+    ctx.lineTo(tipX, wingY + 52);
+    ctx.lineTo(tipX, wingY + 68);
+    ctx.lineTo(rootX, wingY + 44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  });
+  // engines hung on the wings
+  ctx.fillStyle = "#22344c";
+  [fx0 - 22, fx1 + 10].forEach((ex) => {
+    roundRect(ctx, ex, wingY + 24, 12, 26, 5);
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  // horizontal stabilizers at the tail
+  const tpY = height - 44;
+  ctx.fillStyle = "#152232";
+  [[fx0 + 10, 8], [fx1 - 10, width - 8]].forEach(([rootX, tipX]) => {
+    ctx.beginPath();
+    ctx.moveTo(rootX, tpY);
+    ctx.lineTo(tipX, tpY + 20);
+    ctx.lineTo(tipX, tpY + 30);
+    ctx.lineTo(rootX, tpY + 24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  // fuselage: nose cone, straight body, tail cone
+  ctx.fillStyle = "#111a25";
+  ctx.beginPath();
+  ctx.moveTo(cx, 4);
+  ctx.bezierCurveTo(fx0 + 8, 10, fx0, noseBase - 22, fx0, noseBase);
+  ctx.lineTo(fx0, tailBase);
+  ctx.bezierCurveTo(fx0 + 2, height - 24, cx - 12, height - 8, cx, height - 4);
+  ctx.bezierCurveTo(cx + 12, height - 8, fx1 - 2, height - 24, fx1, tailBase);
+  ctx.lineTo(fx1, noseBase);
+  ctx.bezierCurveTo(fx1, noseBase - 22, fx1 - 8, 10, cx, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#2b3d55";
   ctx.lineWidth = 2;
   ctx.stroke();
 
+  // cockpit windshield
+  ctx.fillStyle = "#22384f";
+  ctx.beginPath();
+  ctx.moveTo(cx - 24, 32);
+  ctx.quadraticCurveTo(cx, 18, cx + 24, 32);
+  ctx.lineTo(cx + 16, 42);
+  ctx.quadraticCurveTo(cx, 32, cx - 16, 42);
+  ctx.closePath();
+  ctx.fill();
+
+  // vertical fin seen from above — a spine along the tail cone
+  ctx.fillStyle = "#22344c";
+  roundRect(ctx, cx - 3, tailBase + 10, 6, height - tailBase - 16, 3);
+  ctx.fill();
+
   aisles.forEach((aisle) => {
     ctx.fillStyle = "#0a1119";
-    ctx.fillRect(aisle.x, 10, aisle.width, height - 20);
+    ctx.fillRect(aisle.x, cabinTop - 14, aisle.width, cabinBottom - cabinTop + 26);
     ctx.strokeStyle = "#1e2b3d";
     ctx.setLineDash([5, 9]);
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(aisle.x + aisle.width / 2, 14);
-    ctx.lineTo(aisle.x + aisle.width / 2, height - 14);
+    ctx.moveTo(aisle.x + aisle.width / 2, cabinTop - 10);
+    ctx.lineTo(aisle.x + aisle.width / 2, cabinBottom + 8);
     ctx.stroke();
     ctx.setLineDash([]);
   });
@@ -768,12 +852,12 @@ function drawCabinShell() {
     }
   });
 
-  // cabin windows down both sides — sells the fuselage at a glance
+  // cabin windows down both sides of the fuselage
   ctx.fillStyle = "#2b3d55";
-  for (let y = cabinTop + 6; y < cabinBottom - 10; y += 34) {
-    roundRect(ctx, 7, y, 5, 14, 2.5);
+  for (let y = noseBase + 8; y < tailBase - 12; y += 34) {
+    roundRect(ctx, fx0 + 4, y, 5, 14, 2.5);
     ctx.fill();
-    roundRect(ctx, width - 12, y, 5, 14, 2.5);
+    roundRect(ctx, fx1 - 9, y, 5, 14, 2.5);
     ctx.fill();
   }
 }
@@ -803,9 +887,7 @@ function drawBin(bin) {
   bin.cells.forEach((cell, i) => {
     const cy = cellY(bin, i);
     if (cell) {
-      ctx.fillStyle = cell;
-      roundRect(ctx, cellX, cy, cellW, CELL_H, 4);
-      ctx.fill();
+      // occupied — the suitcase itself is drawn after the slots
     } else if (cellLocked(bin, i)) {
       // unreachable empty space — wasted for the rest of the flight
       ctx.fillStyle = "#20242f";
@@ -826,11 +908,60 @@ function drawBin(bin) {
     }
   });
 
+  bin.bags.forEach((bag) => drawSuitcase(bin, bag, cellX, cellW));
+
   if (bin.closed) {
     ctx.fillStyle = "#ffd54f";
     ctx.font = "12px sans-serif";
     ctx.fillText("\u{1F512}", x + w / 2 - 6, bin.y + bin.height - 1);
   }
+}
+
+// One bag drawn as a single piece of luggage spanning its sections: a body
+// with a zipper seam, straps, a handle at one end and wheels at the other.
+function drawSuitcase(bin, bag, x, w) {
+  const y = cellY(bin, bag.start);
+  const h = bag.size * (CELL_H + CELL_GAP) - CELL_GAP;
+
+  ctx.fillStyle = bag.color;
+  roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.4)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // zipper seam along the length
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2, y + 6);
+  ctx.lineTo(x + w / 2, y + h - 6);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // straps across the body
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(x + 2, y + h * 0.3 - 2, w - 4, 4);
+  if (bag.size > 1) ctx.fillRect(x + 2, y + h * 0.7 - 2, w - 4, 4);
+
+  // handle at the forward end
+  ctx.strokeStyle = "rgba(0,0,0,0.45)";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x + w / 2 - 6, y + 5);
+  ctx.arcTo(x + w / 2 - 6, y + 1, x + w / 2, y + 1, 4);
+  ctx.arcTo(x + w / 2 + 6, y + 1, x + w / 2 + 6, y + 5, 4);
+  ctx.lineTo(x + w / 2 + 6, y + 5);
+  ctx.stroke();
+
+  // wheels at the aft end
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  [x + 6, x + w - 6].forEach((wx) => {
+    ctx.beginPath();
+    ctx.arc(wx, y + h - 4, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 function drawWalkers() {
@@ -858,12 +989,12 @@ function drawSweep() {
   grad.addColorStop(0, "rgba(79,195,247,0)");
   grad.addColorStop(1, "rgba(79,195,247,0.28)");
   ctx.fillStyle = grad;
-  ctx.fillRect(8, sy - 26, width - 16, 30);
+  ctx.fillRect(WING_PAD + 4, sy - 26, width - WING_PAD * 2 - 8, 30);
   ctx.strokeStyle = "#4fc3f7";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(10, sy);
-  ctx.lineTo(width - 10, sy);
+  ctx.moveTo(WING_PAD + 6, sy);
+  ctx.lineTo(width - WING_PAD - 6, sy);
   ctx.stroke();
 }
 
@@ -895,7 +1026,8 @@ function updateHUD() {
       bagSubEl.classList.add("warn");
       gateCheckBtn.classList.add("pulse");
     } else {
-      bagLabelEl.textContent = `Bag — ${state.current.size} section${state.current.size > 1 ? "s" : ""}`;
+      const bagNames = { 1: "Personal item", 2: "Carry-on", 3: "Rollaboard" };
+      bagLabelEl.textContent = `${bagNames[state.current.size] || "Bag"} — ${state.current.size} section${state.current.size > 1 ? "s" : ""}`;
       bagSubEl.textContent = "Tap bin space ahead of the boarding line.";
       bagSubEl.classList.remove("warn");
       gateCheckBtn.classList.remove("pulse");
