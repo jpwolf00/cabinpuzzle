@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Overhead Bin: Boarding Rush</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="hud">
+    <div class="stat"><span class="label">Departure</span><span id="clock">--:--</span></div>
+    <div class="stat"><span class="label">Boarded</span><span id="boardedCount">0</span></div>
+    <div class="stat"><span class="label">Gate-checked</span><span id="gateCheckCount">0</span></div>
+    <div class="stat"><span class="label">Score</span><span id="score">0</span></div>
+  </div>
+
+  <canvas id="cabin" width="1200" height="260"></canvas>
+
+  <div id="doorArea">
+    <div id="activePassenger">
+      <div id="patienceBar"><div id="patienceFill"></div></div>
+      <div id="bagPreview"></div>
+      <div id="passengerLabel">Waiting for boarding to start...</div>
+    </div>
+    <button id="gateCheckBtn">Gate-check bag (costs time)</button>
+  </div>
+
+  <div id="queueArea">
+    <div class="label">Line at the jet bridge</div>
+    <div id="queueRow"></div>
+  </div>
+
+  <div id="overlay" class="hidden">
+    <div id="overlayCard">
+      <h1 id="overlayTitle"></h1>
+      <p id="overlayBody"></p>
+      <button id="restartBtn">Board Again</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
