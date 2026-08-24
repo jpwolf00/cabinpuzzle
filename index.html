@@ -51,10 +51,7 @@ body {
   font-weight: 700;
 }
 
-#progressWrap {
-  width: 100%;
-  max-width: 420px;
-}
+#progressWrap { width: 100%; max-width: 420px; }
 
 #progressLabel {
   display: flex;
@@ -105,27 +102,19 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
 }
 
 #bagPreview {
-  height: 32px;
-  width: 40px;
-  border-radius: 6px;
+  width: 34px;
+  border-radius: 5px;
   background: #3a4a63;
   flex-shrink: 0;
-  transition: background 0.15s;
+  height: 26px;
+  transition: background 0.15s, height 0.15s;
 }
 
 #bagInfo { flex: 1; min-width: 0; }
 
-#bagLabel {
-  font-size: 13px;
-  color: #e8edf4;
-  font-weight: 600;
-}
+#bagLabel { font-size: 13px; color: #e8edf4; font-weight: 600; }
 
-#bagSub {
-  font-size: 11px;
-  color: #8fa2bd;
-  margin-top: 2px;
-}
+#bagSub { font-size: 11px; color: #8fa2bd; margin-top: 2px; }
 
 #bagSub.warn { color: #ff8fb0; font-weight: 600; }
 
@@ -171,13 +160,13 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
   gap: 6px;
   min-height: 26px;
   overflow-x: auto;
+  align-items: flex-end;
 }
 
 .queueBag {
-  height: 22px;
-  border-radius: 4px;
+  width: 18px;
+  border-radius: 3px;
   background: #3a4a63;
-  align-self: center;
   flex-shrink: 0;
 }
 
@@ -251,14 +240,14 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
   </div>
 
   <div id="canvasWrap">
-    <canvas id="cabin" width="380" height="524"></canvas>
+    <canvas id="cabin"></canvas>
   </div>
 
   <div id="bagPanel">
     <div id="bagPreview"></div>
     <div id="bagInfo">
       <div id="bagLabel">Waiting for boarding...</div>
-      <div id="bagSub">Tap an open bin ahead of the line to stow it.</div>
+      <div id="bagSub">Tap bin space ahead of the boarding line.</div>
     </div>
     <button id="gateCheckBtn">Pink tag<br>(gate-check)</button>
   </div>
@@ -280,36 +269,45 @@ canvas { display: block; margin: 0 auto; touch-action: manipulation; }
 
   <script>
 // Overhead Bin: Boarding Rush
-// A vertical two-sided bin-packing game. Passengers stream down the aisle
-// from the nose to the tail; a boarding "front" sweeps down with them.
-// Once the front passes a row, whatever's still empty in that row's bins
-// is gone for good — you can't reach back up the aisle. Occasional bags
-// are secretly oversized and only reveal it when you try to stow them.
-// Filling a bin scores; deliberately closing a full bin scores more.
+//
+// Top-down cabin. Overhead bins run lengthwise along the fuselage — a
+// continuous run of bins down each side of the aisle, their sections
+// stacked nose-to-tail the way real bins are. Passengers stream aft and a
+// boarding "front" sweeps down with them; any bin section the front has
+// already passed is out of reach for good, so empty space left up front is
+// wasted. Some bags are secretly oversized and only reveal it when you try
+// to stow them — those need a pink tag. Fill a bin and latch it shut
+// before the line passes it for a bonus.
 
-const ROWS = 8;
+const CELL_H = 22;          // one bin section, measured along the fuselage
+const CELL_GAP = 3;
+const BIN_PAD = 5;
+const BIN_GAP = 11;         // gap between adjacent bins along the length
+const BIN_W = 100;          // bin depth, across the fuselage
+const SEAT_STRIP = 26;
+const AISLE_W = 60;
+const SIDE_PAD = 18;
+const TOP_MARGIN = 34;
+const BOTTOM_MARGIN = 34;
+
 const CAPACITY_CHOICES = [3, 4, 5, 6];
 const BAG_COLORS = ["#ff8a65", "#ffd54f", "#4fc3f7", "#81c784", "#ba68c8", "#f06292"];
 const OVERSIZED_CHANCE = 0.16;
-const QUEUE_LENGTH = 60;
+const QUEUE_LENGTH = 70;
+const SWEEP_SECONDS = 70;   // nose-to-tail at base speed, before ramp
 
-const TOP_MARGIN = 34;
-const BOTTOM_MARGIN = 34;
-const ROW_HEIGHT = 58;
-const CELL = 22;
-const CELL_GAP = 3;
-const AISLE_WIDTH = 64;
-const SIDE_PAD = 8;
-
-const CANVAS_W = SIDE_PAD * 2 + AISLE_WIDTH + 2 * (6 * (CELL + CELL_GAP) - CELL_GAP);
-const CANVAS_H = TOP_MARGIN + ROWS * ROW_HEIGHT + BOTTOM_MARGIN;
+const CANVAS_W = SIDE_PAD * 2 + BIN_W * 2 + SEAT_STRIP * 2 + AISLE_W;
+const CANVAS_H = 560;
+const CABIN_TOP = TOP_MARGIN;
+const CABIN_BOTTOM = CANVAS_H - BOTTOM_MARGIN;
 
 const SCORE = {
   placeBase: 6,
   placePerSize: 4,
-  closeBonus: 20,
+  closeBase: 8,
+  closePerCapacity: 4,
   oversizedHandled: 4,
-  manualSkipPenalty: -3,
+  wrongGateCheck: -3,
 };
 
 const canvas = document.getElementById("cabin");
@@ -336,28 +334,54 @@ const restartBtn = document.getElementById("restartBtn");
 let state;
 let toastTimer = null;
 
-function aisleLeft() { return CANVAS_W / 2 - AISLE_WIDTH / 2; }
-function aisleRight() { return CANVAS_W / 2 + AISLE_WIDTH / 2; }
-function rowTop(i) { return TOP_MARGIN + i * ROW_HEIGHT; }
-
-function makeBin() {
-  const capacity = CAPACITY_CHOICES[Math.floor(Math.random() * CAPACITY_CHOICES.length)];
-  return {
-    capacity,
-    cells: new Array(capacity).fill(null),
-    locked: false,
-    closed: false,
-    flashUntil: 0,
-    flashColor: null,
-  };
+function binX(side) {
+  return side === "left" ? SIDE_PAD : CANVAS_W - SIDE_PAD - BIN_W;
 }
 
-function makeRows() {
-  const rows = [];
-  for (let i = 0; i < ROWS; i++) {
-    rows.push({ left: makeBin(), right: makeBin(), locked: false });
+function binHeightFor(capacity) {
+  return BIN_PAD * 2 + capacity * (CELL_H + CELL_GAP) - CELL_GAP;
+}
+
+function cellY(bin, i) {
+  return bin.y + BIN_PAD + i * (CELL_H + CELL_GAP);
+}
+
+// A section is out of reach once the boarding front has moved past its
+// aft edge — the crowd has pushed by and nobody can get back to it.
+function cellLocked(bin, i) {
+  return state.sweepY > cellY(bin, i) + CELL_H;
+}
+
+function binFullyPassed(bin) {
+  return state.sweepY > bin.y + bin.height;
+}
+
+function isFull(bin) {
+  return bin.cells.every((c) => c !== null);
+}
+
+// Lay a run of bins down one side, nose to tail, until the cabin runs out.
+function makeBinRun(side) {
+  const bins = [];
+  let y = CABIN_TOP;
+  const minHeight = binHeightFor(Math.min(...CAPACITY_CHOICES));
+  while (y + minHeight <= CABIN_BOTTOM) {
+    const fits = CAPACITY_CHOICES.filter((c) => y + binHeightFor(c) <= CABIN_BOTTOM);
+    const capacity = fits[Math.floor(Math.random() * fits.length)];
+    const height = binHeightFor(capacity);
+    bins.push({
+      side,
+      capacity,
+      cells: new Array(capacity).fill(null),
+      y,
+      height,
+      closed: false,
+      flashUntil: 0,
+      flashColor: null,
+    });
+    y += height + BIN_GAP;
   }
-  return rows;
+  return bins;
 }
 
 function makeBag(index) {
@@ -376,17 +400,17 @@ function newGame() {
   for (let i = 0; i < QUEUE_LENGTH; i++) queue.push(makeBag(i));
 
   state = {
-    rows: makeRows(),
+    bins: [...makeBinRun("left"), ...makeBinRun("right")],
     queue,
     current: null,
-    sweepY: 0,
+    sweepY: CABIN_TOP,
     score: 0,
     stowed: 0,
     closed: 0,
     oversizedHandled: 0,
     lastTick: performance.now(),
     over: false,
-    walkers: [0.1, 0.35, 0.62, 0.85].map((phase) => ({ phase })),
+    walkers: [0.05, 0.3, 0.55, 0.78].map((phase) => ({ phase })),
   };
 
   pullNextBag();
@@ -405,11 +429,12 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1400);
 }
 
+// First run of `len` adjacent sections that are both empty and still reachable.
 function contiguousFreeRun(bin, len) {
   let runStart = -1;
   let runLen = 0;
   for (let i = 0; i < bin.cells.length; i++) {
-    if (bin.cells[i] === null) {
+    if (bin.cells[i] === null && !cellLocked(bin, i)) {
       if (runLen === 0) runStart = i;
       runLen++;
       if (runLen >= len) return runStart;
@@ -420,57 +445,58 @@ function contiguousFreeRun(bin, len) {
   return -1;
 }
 
-function isFull(bin) {
-  return bin.cells.every((c) => c !== null);
+function flash(bin, color, ms) {
+  bin.flashUntil = performance.now() + ms;
+  bin.flashColor = color;
 }
 
-function handleBinTap(rowIndex, side) {
-  if (state.over) return;
-  const row = state.rows[rowIndex];
-  const bin = side === "left" ? row.left : row.right;
+function handleBinTap(bin) {
+  if (state.over || bin.closed) return;
 
-  if (bin.closed) return;
-
+  // Tapping a full bin latches it shut, as long as you can still reach it.
   if (isFull(bin)) {
+    if (binFullyPassed(bin)) {
+      flash(bin, "#ff6b6b", 250);
+      showToast("The line already pushed past that bin");
+      return;
+    }
+    const bonus = SCORE.closeBase + SCORE.closePerCapacity * bin.capacity;
     bin.closed = true;
     state.closed += 1;
-    state.score += SCORE.closeBonus;
-    bin.flashUntil = performance.now() + 350;
-    bin.flashColor = "#ffd54f";
-    showToast(`Bin closed! +${SCORE.closeBonus}`);
+    state.score += bonus;
+    flash(bin, "#ffd54f", 350);
+    showToast(`Bin latched! +${bonus}`);
     return;
   }
 
   if (!state.current) return;
 
-  if (bin.locked) {
-    bin.flashUntil = performance.now() + 250;
-    bin.flashColor = "#ff6b6b";
-    showToast("Too late — the line already passed this row");
+  if (binFullyPassed(bin)) {
+    flash(bin, "#ff6b6b", 250);
+    showToast("The line already pushed past that bin");
     return;
   }
 
   if (state.current.oversized) {
     state.current.revealed = true;
-    bin.flashUntil = performance.now() + 300;
-    bin.flashColor = "#ff6ba8";
+    flash(bin, "#ff6ba8", 300);
     showToast("Doesn't fit! It's oversized — needs a pink tag");
     return;
   }
 
   const start = contiguousFreeRun(bin, state.current.size);
   if (start === -1) {
-    bin.flashUntil = performance.now() + 250;
-    bin.flashColor = "#ff6b6b";
-    showToast("No room in that bin");
+    flash(bin, "#ff6b6b", 250);
+    showToast("No reachable space in that bin");
     return;
   }
 
-  for (let i = start; i < start + state.current.size; i++) bin.cells[i] = state.current.color;
+  for (let i = start; i < start + state.current.size; i++) {
+    bin.cells[i] = state.current.color;
+  }
   state.score += SCORE.placeBase + SCORE.placePerSize * state.current.size;
   state.stowed += 1;
-  bin.flashUntil = performance.now() + 250;
-  bin.flashColor = "#4caf7d";
+  flash(bin, "#4caf7d", 250);
   pullNextBag();
 }
 
@@ -481,60 +507,36 @@ function gateCheck() {
     state.score += SCORE.oversizedHandled;
     showToast("Pink-tagged and gate-checked");
   } else {
-    state.score += SCORE.manualSkipPenalty;
-    showToast("Gate-checked");
+    state.score += SCORE.wrongGateCheck;
+    showToast("Gate-checked a bag that would have fit");
   }
   pullNextBag();
 }
 
 function tick(dt) {
-  const progress = state.sweepY / (CANVAS_H - BOTTOM_MARGIN);
-  const speedMultiplier = 1 + 1.6 * progress;
-  const baseSpeed = (CANVAS_H - TOP_MARGIN - BOTTOM_MARGIN) / 62;
-  state.sweepY += baseSpeed * speedMultiplier * dt;
+  const span = CABIN_BOTTOM - CABIN_TOP;
+  const progress = (state.sweepY - CABIN_TOP) / span;
+  const speed = (span / SWEEP_SECONDS) * (1 + 1.5 * progress);
+  state.sweepY += speed * dt;
 
-  state.rows.forEach((row, i) => {
-    if (row.locked) return;
-    const bottom = rowTop(i) + ROW_HEIGHT - 10;
-    if (state.sweepY > bottom) {
-      row.locked = true;
-      row.left.locked = true;
-      row.right.locked = true;
-    }
-  });
-
-  if (state.sweepY >= CANVAS_H - BOTTOM_MARGIN && !state.over) {
-    endGame();
-  }
+  if (state.sweepY >= CABIN_BOTTOM && !state.over) endGame();
 }
 
 function endGame() {
   state.over = true;
   overlayEl.classList.remove("hidden");
-  let wastedCells = 0;
-  let totalCells = 0;
-  state.rows.forEach((row) => {
-    [row.left, row.right].forEach((bin) => {
-      totalCells += bin.capacity;
-      wastedCells += bin.cells.filter((c) => c === null).length;
-    });
+  let filled = 0;
+  let total = 0;
+  state.bins.forEach((bin) => {
+    total += bin.capacity;
+    filled += bin.cells.filter((c) => c !== null).length;
   });
-  const efficiency = Math.round(((totalCells - wastedCells) / totalCells) * 100);
+  const efficiency = Math.round((filled / total) * 100);
   overlayTitleEl.textContent = "Doors closing!";
   overlayBodyEl.textContent =
-    `Stowed ${state.stowed} bags, closed ${state.closed} bins, pink-tagged ${state.oversizedHandled} oversized ` +
-    `bags. Cabin was ${efficiency}% packed. Final score: ${state.score}.`;
-}
-
-function binRect(rowIndex, side) {
-  const row = state.rows[rowIndex];
-  const bin = side === "left" ? row.left : row.right;
-  const width = bin.capacity * (CELL + CELL_GAP) - CELL_GAP;
-  const y = rowTop(rowIndex) + 14;
-  let x;
-  if (side === "left") x = aisleLeft() - width;
-  else x = aisleRight();
-  return { x, y, width, height: CELL, bin };
+    `Stowed ${state.stowed} bags, latched ${state.closed} bins, pink-tagged ` +
+    `${state.oversizedHandled} oversized bags. The cabin ended ${efficiency}% packed. ` +
+    `Final score: ${state.score}.`;
 }
 
 function roundRect(c, x, y, w, h, r) {
@@ -547,110 +549,129 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
-function draw() {
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
-  // fuselage background
+function drawFuselage() {
   ctx.fillStyle = "#111a25";
-  roundRect(ctx, 0, 0, CANVAS_W, CANVAS_H, 18);
+  roundRect(ctx, 4, 6, CANVAS_W - 8, CANVAS_H - 12, 46);
   ctx.fill();
-
-  // aisle strip
-  ctx.fillStyle = "#0a1119";
-  ctx.fillRect(aisleLeft(), 0, AISLE_WIDTH, CANVAS_H);
   ctx.strokeStyle = "#243348";
-  ctx.setLineDash([6, 8]);
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // aisle
+  const ax = CANVAS_W / 2 - AISLE_W / 2;
+  ctx.fillStyle = "#0a1119";
+  ctx.fillRect(ax, 10, AISLE_W, CANVAS_H - 20);
+  ctx.strokeStyle = "#1e2b3d";
+  ctx.setLineDash([5, 9]);
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(CANVAS_W / 2, 4);
-  ctx.lineTo(CANVAS_W / 2, CANVAS_H - 4);
+  ctx.moveTo(CANVAS_W / 2, 14);
+  ctx.lineTo(CANVAS_W / 2, CANVAS_H - 14);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // rows: bins + seat hint
-  state.rows.forEach((row, i) => {
-    ["left", "right"].forEach((side) => {
-      const { x, y, width, height, bin } = binRect(i, side);
-      const now = performance.now();
-      const flashing = now < bin.flashUntil;
-
-      let fillStyle = "#1c2733";
-      let strokeStyle = "#2f3f56";
-      if (bin.closed) {
-        strokeStyle = "#ffd54f";
-      } else if (bin.locked && !isFull(bin)) {
-        fillStyle = "#161f29";
-        strokeStyle = "#2a2f3a";
-      }
-      if (flashing) {
-        strokeStyle = bin.flashColor;
-        fillStyle = bin.flashColor + "22";
-      }
-
-      ctx.fillStyle = fillStyle;
-      ctx.strokeStyle = strokeStyle;
-      ctx.lineWidth = bin.closed ? 3 : 2;
-      roundRect(ctx, x - 6, y - 8, width + 12, height + 16, 8);
+  // seat rows between the bins and the aisle, for orientation
+  ctx.fillStyle = "#18222f";
+  for (let y = CABIN_TOP; y < CABIN_BOTTOM - 12; y += 30) {
+    [SIDE_PAD + BIN_W + 4, CANVAS_W - SIDE_PAD - BIN_W - SEAT_STRIP + 4].forEach((sx) => {
+      roundRect(ctx, sx, y, SEAT_STRIP - 8, 22, 4);
       ctx.fill();
-      ctx.stroke();
-
-      bin.cells.forEach((cell, ci) => {
-        const cx = x + ci * (CELL + CELL_GAP);
-        if (cell) {
-          ctx.fillStyle = cell;
-          roundRect(ctx, cx, y, CELL, CELL, 4);
-          ctx.fill();
-        } else if (bin.locked) {
-          ctx.fillStyle = "#20242f";
-          roundRect(ctx, cx, y, CELL, CELL, 4);
-          ctx.fill();
-          ctx.strokeStyle = "#3a3040";
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(cx + 3, y + CELL - 3);
-          ctx.lineTo(cx + CELL - 3, y + 3);
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = "#2a3646";
-          roundRect(ctx, cx, y, CELL, CELL, 4);
-          ctx.fill();
-        }
-      });
-
-      if (bin.closed) {
-        ctx.fillStyle = "#ffd54f";
-        ctx.font = "11px sans-serif";
-        const lockX = side === "left" ? x - 4 : x + width - 6;
-        ctx.fillText("\u{1F512}", lockX, y - 10);
-      }
     });
+  }
+}
+
+function drawBin(bin) {
+  const x = binX(bin.side);
+  const now = performance.now();
+  const flashing = now < bin.flashUntil;
+  const passed = binFullyPassed(bin);
+
+  let fillStyle = "#1c2733";
+  let strokeStyle = "#2f3f56";
+  if (bin.closed) strokeStyle = "#ffd54f";
+  else if (passed) { fillStyle = "#161f29"; strokeStyle = "#2a2f3a"; }
+  if (flashing) { strokeStyle = bin.flashColor; fillStyle = bin.flashColor + "22"; }
+
+  ctx.fillStyle = fillStyle;
+  ctx.strokeStyle = strokeStyle;
+  ctx.lineWidth = bin.closed ? 3 : 2;
+  roundRect(ctx, x, bin.y, BIN_W, bin.height, 9);
+  ctx.fill();
+  ctx.stroke();
+
+  const cellX = x + BIN_PAD;
+  const cellW = BIN_W - BIN_PAD * 2;
+  bin.cells.forEach((cell, i) => {
+    const cy = cellY(bin, i);
+    if (cell) {
+      ctx.fillStyle = cell;
+      roundRect(ctx, cellX, cy, cellW, CELL_H, 4);
+      ctx.fill();
+    } else if (cellLocked(bin, i)) {
+      // unreachable empty space — wasted for the rest of the flight
+      ctx.fillStyle = "#20242f";
+      roundRect(ctx, cellX, cy, cellW, CELL_H, 4);
+      ctx.fill();
+      ctx.strokeStyle = "#3a3040";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let hx = cellX + 4; hx < cellX + cellW; hx += 8) {
+        ctx.moveTo(hx, cy + CELL_H - 2);
+        ctx.lineTo(hx + CELL_H - 4, cy + 2);
+      }
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "#2a3646";
+      roundRect(ctx, cellX, cy, cellW, CELL_H, 4);
+      ctx.fill();
+    }
   });
 
-  // walking passengers in the aisle (decorative)
+  if (bin.closed) {
+    ctx.fillStyle = "#ffd54f";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("\u{1F512}", x + BIN_W / 2 - 6, bin.y + bin.height - 1);
+  }
+}
+
+function drawWalkers() {
   const now = performance.now();
   state.walkers.forEach((w) => {
-    const t = ((now / 1400 + w.phase) % 1);
-    const y = t * Math.max(state.sweepY, 20);
-    const bob = Math.sin(now / 180 + w.phase * 10) * 2;
+    const t = (now / 2600 + w.phase) % 1;
+    const y = CABIN_TOP + t * Math.max(state.sweepY - CABIN_TOP, 24);
+    const bob = Math.sin(now / 190 + w.phase * 10) * 3;
     ctx.fillStyle = "#5b7ba8";
     ctx.beginPath();
-    ctx.ellipse(CANVAS_W / 2 + bob, y + 6, 6, 8, 0, 0, Math.PI * 2);
+    ctx.ellipse(CANVAS_W / 2 + bob, y, 7, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#7f9dc9";
+    ctx.beginPath();
+    ctx.arc(CANVAS_W / 2 + bob, y - 3, 4, 0, Math.PI * 2);
     ctx.fill();
   });
+}
 
-  // boarding front sweep line
-  const sy = Math.min(state.sweepY, CANVAS_H - BOTTOM_MARGIN);
-  const grad = ctx.createLinearGradient(0, sy - 10, 0, sy + 4);
+function drawSweep() {
+  const sy = Math.min(state.sweepY, CABIN_BOTTOM);
+  const grad = ctx.createLinearGradient(0, sy - 26, 0, sy + 4);
   grad.addColorStop(0, "rgba(79,195,247,0)");
-  grad.addColorStop(1, "rgba(79,195,247,0.35)");
+  grad.addColorStop(1, "rgba(79,195,247,0.28)");
   ctx.fillStyle = grad;
-  ctx.fillRect(0, sy - 10, CANVAS_W, 14);
+  ctx.fillRect(8, sy - 26, CANVAS_W - 16, 30);
   ctx.strokeStyle = "#4fc3f7";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(4, sy);
-  ctx.lineTo(CANVAS_W - 4, sy);
+  ctx.moveTo(10, sy);
+  ctx.lineTo(CANVAS_W - 10, sy);
   ctx.stroke();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  drawFuselage();
+  state.bins.forEach(drawBin);
+  drawWalkers();
+  drawSweep();
 }
 
 function updateHUD() {
@@ -659,11 +680,11 @@ function updateHUD() {
   closedEl.textContent = state.closed;
   oversizedEl.textContent = state.oversizedHandled;
 
-  const pct = Math.min(100, (state.sweepY / (CANVAS_H - BOTTOM_MARGIN)) * 100);
+  const pct = Math.min(100, ((state.sweepY - CABIN_TOP) / (CABIN_BOTTOM - CABIN_TOP)) * 100);
   progressFillEl.style.width = `${pct}%`;
 
   if (state.current) {
-    bagPreviewEl.style.width = `${24 + state.current.size * 16}px`;
+    bagPreviewEl.style.height = `${state.current.size * 14 + 8}px`;
     bagPreviewEl.style.background = state.current.color;
     if (state.current.revealed) {
       bagLabelEl.textContent = "Oversized bag — won't fit anywhere";
@@ -671,8 +692,8 @@ function updateHUD() {
       bagSubEl.classList.add("warn");
       gateCheckBtn.classList.add("pulse");
     } else {
-      bagLabelEl.textContent = `Bag size ${state.current.size}`;
-      bagSubEl.textContent = "Tap an open bin ahead of the boarding line.";
+      bagLabelEl.textContent = `Bag — ${state.current.size} section${state.current.size > 1 ? "s" : ""}`;
+      bagSubEl.textContent = "Tap bin space ahead of the boarding line.";
       bagSubEl.classList.remove("warn");
       gateCheckBtn.classList.remove("pulse");
     }
@@ -690,7 +711,7 @@ function updateHUD() {
   state.queue.slice(0, 14).forEach((b) => {
     const el = document.createElement("div");
     el.className = "queueBag";
-    el.style.width = `${14 + b.size * 14}px`;
+    el.style.height = `${b.size * 8 + 6}px`;
     el.style.background = b.color;
     queueRowEl.appendChild(el);
   });
@@ -705,29 +726,18 @@ function loop(now) {
   draw();
   updateHUD();
   if (!state.over) requestAnimationFrame(loop);
-  else {
-    draw();
-    updateHUD();
-  }
 }
 
 canvas.addEventListener("click", (e) => {
   const rect = canvas.getBoundingClientRect();
-  const scaleX = CANVAS_W / rect.width;
-  const scaleY = CANVAS_H / rect.height;
-  const x = (e.clientX - rect.left) * scaleX;
-  const y = (e.clientY - rect.top) * scaleY;
+  const x = (e.clientX - rect.left) * (CANVAS_W / rect.width);
+  const y = (e.clientY - rect.top) * (CANVAS_H / rect.height);
 
-  for (let i = 0; i < ROWS; i++) {
-    const top = rowTop(i);
-    if (y < top || y > top + ROW_HEIGHT) continue;
-    ["left", "right"].forEach((side) => {
-      const { x: bx, width } = binRect(i, side);
-      if (x >= bx - 6 && x <= bx + width + 6) {
-        handleBinTap(i, side);
-      }
-    });
-  }
+  const hit = state.bins.find((bin) => {
+    const bx = binX(bin.side);
+    return x >= bx && x <= bx + BIN_W && y >= bin.y && y <= bin.y + bin.height;
+  });
+  if (hit) handleBinTap(hit);
 });
 
 gateCheckBtn.addEventListener("click", gateCheck);
