@@ -91,7 +91,7 @@ body {
   overflow: hidden; /* camera-follow sets scrollTop; the player never scrolls */
 }
 
-canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
+canvas { display: block; width: 100%; height: auto; margin: 0 auto; touch-action: manipulation; }
 
 #bagPanel { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
 
@@ -221,6 +221,29 @@ canvas { display: block; width: 100%; height: auto; touch-action: manipulation; 
   margin-bottom: 6px;
 }
 
+#speedRow {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin: 14px 0 10px;
+}
+
+.speedBtn {
+  flex: 1;
+  background: #1c2733;
+  border: 1px solid #2f3f56;
+  border-radius: 8px;
+  padding: 8px 6px;
+  color: #8fa2bd;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1.35;
+}
+
+.speedBtn .sname { display: block; font-weight: 600; color: #c3d0e2; }
+.speedBtn.sel { border-color: #4fc3f7; background: #1d3546; }
+.speedBtn.sel .sname { color: #4fc3f7; }
+
 .btnRow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
 
 button.primary {
@@ -316,6 +339,7 @@ button.ghost:hover { color: #e8edf4; border-color: #4a5f7f; }
       <h1 id="overlayTitle"></h1>
       <p id="overlayBody"></p>
       <ul id="quirkList"></ul>
+      <div id="speedRow"></div>
       <div id="fleetList"></div>
       <div class="btnRow" id="overlayButtons"></div>
     </div>
@@ -347,6 +371,14 @@ const TOP_MARGIN = 64;    // room for the nose cone and cockpit
 const BOTTOM_MARGIN = 72; // room for the tail cone and fin
 
 const BAG_COLORS = ["#ff8a65", "#ffd54f", "#4fc3f7", "#81c784", "#ba68c8", "#f06292"];
+
+// Boarding speed. "Brisk" is the original pace; the gentler modes stretch the
+// same cabin over more time so there is room to think between bags.
+const SPEED_MODES = [
+  { id: "easy",   name: "Relaxed", note: "Plenty of time", mult: 1.85 },
+  { id: "medium", name: "Steady",  note: "Some pressure",  mult: 1.40 },
+  { id: "hard",   name: "Brisk",   note: "No slack",       mult: 1.00 },
+];
 
 const SCORE = {
   placeBase: 6,
@@ -491,6 +523,7 @@ const overlayTagEl = el("overlayTag");
 const overlayTitleEl = el("overlayTitle");
 const overlayBodyEl = el("overlayBody");
 const quirkListEl = el("quirkList");
+const speedRowEl = el("speedRow");
 const fleetListEl = el("fleetList");
 const overlayButtonsEl = el("overlayButtons");
 
@@ -498,6 +531,7 @@ let state = null;
 let toastTimer = null;
 let careerScore = 0;
 let unlocked = 1;
+let speedMode = "medium";
 
 // --- persistence (best effort; private windows and blocked storage are fine) --
 function loadProgress() {
@@ -507,13 +541,19 @@ function loadProgress() {
     const data = JSON.parse(raw);
     if (typeof data.unlocked === "number") unlocked = Math.max(1, Math.min(FLEET.length, data.unlocked));
     if (typeof data.careerScore === "number") careerScore = data.careerScore;
+    if (SPEED_MODES.some((m) => m.id === data.speed)) speedMode = data.speed;
   } catch (e) { /* storage unavailable — start fresh */ }
 }
 
 function saveProgress() {
   try {
-    localStorage.setItem("cabinpuzzle.progress", JSON.stringify({ unlocked, careerScore }));
+    localStorage.setItem("cabinpuzzle.progress", JSON.stringify({ unlocked, careerScore, speed: speedMode }));
   } catch (e) { /* storage unavailable — progress is session-only */ }
+}
+
+function speedMult() {
+  const m = SPEED_MODES.find((x) => x.id === speedMode);
+  return m ? m.mult : 1;
 }
 
 // --- cabin construction ------------------------------------------------------
@@ -601,6 +641,7 @@ function startLevel(levelIndex) {
 
   state = {
     spec, cabin, levelIndex, queue,
+    sweepSeconds: spec.sweepSeconds * speedMult(),
     totalSections,
     current: null,
     sweepY: cabin.cabinTop,
@@ -612,7 +653,7 @@ function startLevel(levelIndex) {
     lastTick: performance.now(),
     over: false,
     walkers: cabin.aisles.flatMap((aisle) =>
-      [0.05, 0.3, 0.55, 0.78].map((phase, i) => ({
+      [0.0, 0.2, 0.4, 0.6, 0.8].map((phase, i) => ({
         aisle,
         phase,
         shirt: ["#6f8fb8", "#b88f6f", "#7fb08a", "#a884b8", "#b8a06f", "#8aa4c4"][(Math.random() * 6) | 0],
@@ -626,7 +667,8 @@ function startLevel(levelIndex) {
   pullNextBag();
   tailNumEl.textContent = spec.tail;
   tailTypeEl.textContent = spec.name + " · " + spec.type;
-  tailLevelEl.textContent = `Level ${levelIndex + 1} of ${FLEET.length}`;
+  const mode = SPEED_MODES.find((m) => m.id === speedMode);
+  tailLevelEl.textContent = `Level ${levelIndex + 1}/${FLEET.length} · ${mode ? mode.name : ""}`;
   overlayEl.classList.add("hidden");
   requestAnimationFrame(loop);
 }
@@ -758,7 +800,7 @@ function tick(dt) {
   const { cabinTop, cabinBottom } = state.cabin;
   const span = cabinBottom - cabinTop;
   const progress = (state.sweepY - cabinTop) / span;
-  const speed = (span / state.spec.sweepSeconds) * (1 + 1.5 * progress);
+  const speed = (span / state.sweepSeconds) * (1 + 1.5 * progress);
   state.sweepY += speed * dt;
   if (state.sweepY >= cabinBottom && !state.over) endLevel();
 }
@@ -984,64 +1026,76 @@ function drawSuitcase(bin, bag, x, w) {
   });
 }
 
-// Passengers seen from above: shoulders, swinging arms, a head with hair,
-// and (for some) a rollaboard towed behind them up the aisle.
+// Passengers seen from above, streaming aft toward the boarding front.
+//
+// Their position is anchored to the front rather than to the cabin, and closes
+// on it at a fixed rate, so they always read as walking aft at a steady pace no
+// matter how long the cabin is, how fast the line is moving, or that the camera
+// is tracking the line at the same time.
+const WALK_BAND = 340;   // how far ahead of the front passengers are drawn
+const WALK_SPEED = 62;   // cabin px per second, closing on the front
+
 function drawWalkers() {
   const now = performance.now();
   const { cabinTop } = state.cabin;
-  const boardedLen = Math.max(state.sweepY - cabinTop, 24);
-  const walkDur = 2000 + boardedLen * 9; // constant walking speed, any cabin length
-  state.walkers.forEach((w) => {
-    const t = (now / walkDur + w.phase) % 1;
-    const y = cabinTop + t * boardedLen;
-    const stride = now / 170 + w.phase * 10;
-    const cx = w.aisle.x + w.aisle.width / 2 + Math.sin(stride / 2) * 2.5;
-    const sway = Math.sin(stride) * 0.12;   // shoulder rotation while walking
-    const swing = Math.sin(stride) * 3.5;   // opposite-arm swing
+  // before the doors open, queue them just inside the nose
+  const anchor = Math.max(state.sweepY, cabinTop + 70);
+  const cycle = WALK_BAND + 60;
 
-    // towed rollaboard trails behind (up the aisle), tilted with the pull
+  state.walkers.forEach((w) => {
+    // offset shrinks over time => walker closes on the front => moves aft
+    const off = WALK_BAND - (((now / 1000) * WALK_SPEED + w.phase * cycle) % cycle);
+    const y = anchor - off;
+    if (y < cabinTop - 4) return; // not into the cabin yet
+
+    const stride = now / 150 + w.phase * 11;
+    const cx = w.aisle.x + w.aisle.width / 2 + Math.sin(stride / 2) * 2.5;
+    const sway = Math.sin(stride) * 0.14;  // shoulder rotation while walking
+    const swing = Math.sin(stride) * 5;    // opposite-arm swing
+
+    // towed rollaboard trails behind, up the aisle
     if (w.bag) {
       const bx = cx - Math.sin(sway * 2) * 2;
-      const by = y - 16;
-      ctx.strokeStyle = "rgba(160,175,195,0.7)";
-      ctx.lineWidth = 1.5;
+      const by = y - 25;
+      ctx.strokeStyle = "rgba(170,185,205,0.75)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(cx - 6, y - 1);
-      ctx.lineTo(bx, by + 4);
+      ctx.moveTo(cx - 8, y - 2);
+      ctx.lineTo(bx, by + 7);
       ctx.stroke();
       ctx.fillStyle = w.bag;
-      roundRect(ctx, bx - 4.5, by - 6, 9, 11, 3);
+      roundRect(ctx, bx - 7, by - 8, 14, 17, 4);
       ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.35)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
+      ctx.lineWidth = 1.2;
       ctx.stroke();
     }
 
-    // arms — small hands at the shoulder tips, swinging alternately
+    // arms, swinging alternately
     ctx.fillStyle = w.skin;
     [-1, 1].forEach((side) => {
       ctx.beginPath();
-      ctx.arc(cx + side * 8 * Math.cos(sway), y + side * swing * 0.8, 2.2, 0, Math.PI * 2);
+      ctx.arc(cx + side * 11 * Math.cos(sway), y + side * swing, 3.2, 0, Math.PI * 2);
       ctx.fill();
     });
 
     // shoulders
     ctx.fillStyle = w.shirt;
     ctx.beginPath();
-    ctx.ellipse(cx, y, 8, 4.5, sway, 0, Math.PI * 2);
+    ctx.ellipse(cx, y, 11.5, 6.5, sway, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.lineWidth = 1.2;
     ctx.stroke();
 
-    // head with hair
+    // head, with hair toward the nose so the facing direction reads
     ctx.fillStyle = w.skin;
     ctx.beginPath();
-    ctx.arc(cx, y, 3.4, 0, Math.PI * 2);
+    ctx.arc(cx, y, 5.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = w.hair;
     ctx.beginPath();
-    ctx.arc(cx, y - 0.8, 2.9, Math.PI, Math.PI * 2); // hair toward the nose
+    ctx.arc(cx, y - 1.1, 4.4, Math.PI, Math.PI * 2);
     ctx.fill();
   });
 }
@@ -1148,6 +1202,7 @@ function loop(now) {
 
 function clearOverlay() {
   quirkListEl.innerHTML = "";
+  speedRowEl.innerHTML = "";
   fleetListEl.innerHTML = "";
   overlayButtonsEl.innerHTML = "";
   overlayBodyEl.textContent = "";
@@ -1184,6 +1239,18 @@ function showBriefing(levelIndex) {
   diff.textContent = `Difficulty: ${names[spec.difficulty]} ` +
     "\u25CF".repeat(spec.difficulty) + "\u25CB".repeat(4 - spec.difficulty);
   quirkListEl.appendChild(diff);
+
+  SPEED_MODES.forEach((m) => {
+    const b = document.createElement("button");
+    b.className = "speedBtn" + (m.id === speedMode ? " sel" : "");
+    b.innerHTML = `<span class="sname">${m.name}</span>${m.note}`;
+    b.addEventListener("click", () => {
+      speedMode = m.id;
+      saveProgress();
+      showBriefing(levelIndex); // re-render so the selection and pips update
+    });
+    speedRowEl.appendChild(b);
+  });
 
   addButton("Begin boarding", "primary", () => startLevel(levelIndex));
   if (FLEET.length > 1) addButton("Choose aircraft", "ghost", showFleetSelect);
