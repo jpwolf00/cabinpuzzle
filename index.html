@@ -293,6 +293,33 @@ button.ghost:hover { color: #e8edf4; border-color: #4a5f7f; }
 .fleetBtn .fname { font-weight: 600; white-space: nowrap; }
 .fleetBtn .fsub { font-size: 10.5px; color: #8fa2bd; margin-left: auto; text-align: right; line-height: 1.3; }
 .fleetBtn.done { border-left: 3px solid #4caf7d; }
+
+#goalPanel {
+  width: 100%;
+  max-width: 460px;
+  text-align: center;
+  font-size: 11.5px;
+  color: #8fa2bd;
+  min-height: 14px;
+}
+
+#goalPanel.ok { color: #7fd6a8; }
+
+#pauseBtn { margin-left: auto; padding: 2px 10px; font-size: 11px; line-height: 1.5; }
+
+#overlayStars {
+  font-size: 24px;
+  color: #ffd54f;
+  letter-spacing: 8px;
+  margin: 2px 0 4px;
+  min-height: 30px;
+}
+
+.briefArt { width: 120px; height: 150px; margin: 4px auto 8px; display: block; }
+
+.fstars { color: #ffd54f; font-size: 11px; letter-spacing: 1px; margin-left: 6px; }
+.fstars .on { color: #ffd54f; }
+.fstars .off { color: #33415a; }
 </style>
 </head>
 <body>
@@ -300,6 +327,7 @@ button.ghost:hover { color: #e8edf4; border-color: #4a5f7f; }
     <span id="tailNum">—</span>
     <span id="tailType"></span>
     <span id="tailLevel"></span>
+    <button id="pauseBtn" class="ghost" title="Pause (Esc)">II</button>
   </div>
 
   <div class="panel" id="hud">
@@ -314,6 +342,8 @@ button.ghost:hover { color: #e8edf4; border-color: #4a5f7f; }
     <div id="progressLabel"><span>Nose</span><span>Boarding front</span><span>Tail</span></div>
     <div id="progressBar"><div id="progressFill"></div></div>
   </div>
+
+  <div id="goalPanel"></div>
 
   <div id="canvasWrap"><canvas id="cabin"></canvas></div>
 
@@ -337,6 +367,8 @@ button.ghost:hover { color: #e8edf4; border-color: #4a5f7f; }
     <div id="overlayCard">
       <div id="overlayTag"></div>
       <h1 id="overlayTitle"></h1>
+      <div id="overlayStars"></div>
+      <canvas id="briefArt" class="briefArt" width="240" height="300"></canvas>
       <p id="overlayBody"></p>
       <ul id="quirkList"></ul>
       <div id="speedRow"></div>
@@ -498,8 +530,8 @@ const FLEET = [
   },
 ];
 
-const canvas = document.getElementById("cabin");
-const ctx = canvas.getContext("2d");
+let canvas = document.getElementById("cabin");
+let ctx = canvas.getContext("2d");
 
 const el = (id) => document.getElementById(id);
 const canvasWrapEl = el("canvasWrap");
@@ -521,17 +553,22 @@ const toastEl = el("toast");
 const overlayEl = el("overlay");
 const overlayTagEl = el("overlayTag");
 const overlayTitleEl = el("overlayTitle");
+const overlayStarsEl = el("overlayStars");
 const overlayBodyEl = el("overlayBody");
 const quirkListEl = el("quirkList");
 const speedRowEl = el("speedRow");
 const fleetListEl = el("fleetList");
 const overlayButtonsEl = el("overlayButtons");
+const goalEl = el("goalPanel");
+const pauseBtnEl = el("pauseBtn");
+const briefArtEl = el("briefArt");
 
 let state = null;
 let toastTimer = null;
 let careerScore = 0;
 let unlocked = 1;
 let speedMode = "medium";
+let bestStars = {};   // per-aircraft best star count, keyed by spec.id
 
 // --- persistence (best effort; private windows and blocked storage are fine) --
 function loadProgress() {
@@ -542,12 +579,15 @@ function loadProgress() {
     if (typeof data.unlocked === "number") unlocked = Math.max(1, Math.min(FLEET.length, data.unlocked));
     if (typeof data.careerScore === "number") careerScore = data.careerScore;
     if (SPEED_MODES.some((m) => m.id === data.speed)) speedMode = data.speed;
+    if (data.bestStars && typeof data.bestStars === "object") {
+      bestStars = data.bestStars;
+    }
   } catch (e) { /* storage unavailable — start fresh */ }
 }
 
 function saveProgress() {
   try {
-    localStorage.setItem("cabinpuzzle.progress", JSON.stringify({ unlocked, careerScore, speed: speedMode }));
+    localStorage.setItem("cabinpuzzle.progress", JSON.stringify({ unlocked, careerScore, speed: speedMode, bestStars }));
   } catch (e) { /* storage unavailable — progress is session-only */ }
 }
 
@@ -624,10 +664,14 @@ function startLevel(levelIndex) {
   const spec = FLEET[levelIndex];
   const cabin = buildCabin(spec);
 
-  canvas.width = cabin.width;
-  canvas.height = cabin.height;
+  // Render at device pixel resolution so the cabin stays crisp on HiDPI
+  // displays; all drawing keeps its logical coordinate space.
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  canvas.width = Math.round(cabin.width * dpr);
+  canvas.height = Math.round(cabin.height * dpr);
   // Never upscale past native resolution; narrower screens scale it down.
   canvas.style.maxWidth = cabin.width + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const totalSections = cabin.bins.reduce((sum, b) => sum + b.capacity, 0);
   // Supply enough bags to overfill the cabin even after oversized ones are
@@ -652,6 +696,13 @@ function startLevel(levelIndex) {
     oversizedHandled: 0,
     lastTick: performance.now(),
     over: false,
+    paused: false,
+    popups: [],
+    combo: 0,
+    lastStowAt: 0,
+    missed: 0,
+    sealed: 0,   // empty sections the front rolled past, wasted
+    sealedAt: 0,
     walkers: cabin.aisles.flatMap((aisle) =>
       [0.0, 0.2, 0.4, 0.6, 0.8].map((phase, i) => ({
         aisle,
@@ -669,8 +720,30 @@ function startLevel(levelIndex) {
   tailTypeEl.textContent = spec.name + " · " + spec.type;
   const mode = SPEED_MODES.find((m) => m.id === speedMode);
   tailLevelEl.textContent = `Level ${levelIndex + 1}/${FLEET.length} · ${mode ? mode.name : ""}`;
+  pauseBtnEl.textContent = "II";
   overlayEl.classList.add("hidden");
   requestAnimationFrame(loop);
+}
+
+function pauseLevel() {
+  if (!state || state.over || state.paused) return;
+  state.paused = true;
+  state.lastTick = performance.now();
+  pauseBtnEl.textContent = "\u25B6";
+  clearOverlay();
+  overlayTagEl.textContent = "Held at the door";
+  overlayTitleEl.textContent = "Paused";
+  overlayBodyEl.textContent = "The line is holding. Catch your breath.";
+  addButton("Resume boarding", "primary", resumeLevel);
+  overlayEl.classList.remove("hidden");
+}
+
+function resumeLevel() {
+  if (!state || !state.paused) return;
+  state.paused = false;
+  state.lastTick = performance.now();
+  pauseBtnEl.textContent = "II";
+  overlayEl.classList.add("hidden");
 }
 
 function pullNextBag() {
@@ -725,8 +798,12 @@ function flash(bin, color, ms) {
   bin.flashColor = color;
 }
 
+function spawnPopup(x, y, text, color) {
+  state.popups.push({ x, y, text, color, born: performance.now() });
+}
+
 function handleBinTap(bin) {
-  if (state.over || bin.closed) return;
+  if (state.over || state.paused || bin.closed) return;
 
   // Tapping a full bin latches it shut, as long as you can still reach it.
   if (isFull(bin)) {
@@ -739,7 +816,10 @@ function handleBinTap(bin) {
     bin.closed = true;
     state.closed += 1;
     state.score += bonus;
-    flash(bin, "#ffd54f", 350);
+    bin.flashUntil = performance.now() + 900;
+    bin.flashColor = "#ffd54f";
+    bin.latchFlash = true;
+    spawnPopup(bin.column.x + bin.column.width / 2, bin.y + bin.height / 2, `\u2691 +${bonus}`, "#ffd54f");
     showToast(`Bin latched! +${bonus}`);
     return;
   }
@@ -770,20 +850,38 @@ function handleBinTap(bin) {
     bin.cells[i] = state.current.color;
   }
   bin.bags.push({ start, size: state.current.size, color: state.current.color });
-  state.score += SCORE.placeBase + SCORE.placePerSize * state.current.size;
+  const gained = SCORE.placeBase + SCORE.placePerSize * state.current.size;
+  state.score += gained;
   state.stowed += 1;
   flash(bin, "#4caf7d", 250);
+  const px = bin.column.x + bin.column.width / 2;
+  const py = cellY(bin, start + (state.current.size - 1) / 2);
+  spawnPopup(px, py, `+${gained}`, "#7fd6a8");
+  const now = performance.now();
+  if (now - state.lastStowAt < 3500) {
+    state.combo += 1;
+    if (state.combo >= 2) {
+      const bonus = 2 * state.combo;
+      state.score += bonus;
+      spawnPopup(px, py - CELL_H, `combo \u00D7${state.combo} +${bonus}`, "#ffd54f");
+    }
+  }
+  state.lastStowAt = now;
   pullNextBag();
 }
 
 function gateCheck() {
-  if (!state.current || state.over) return;
+  if (!state.current || state.over || state.paused) return;
+  const px = state.cabin.width / 2;
+  const py = Math.max(state.cabin.cabinTop + 50, state.sweepY - 70);
   if (state.current.oversized) {
     state.oversizedHandled += 1;
     state.score += SCORE.oversizedHandled;
+    spawnPopup(px, py, `+${SCORE.oversizedHandled}`, "#7fd6a8");
     showToast("Pink-tagged and gate-checked");
   } else {
     state.score += SCORE.wrongGateCheck;
+    spawnPopup(px, py, `${SCORE.wrongGateCheck}`, "#ff6b6b");
     showToast("Gate-checked a bag that would have fit");
   }
   pullNextBag();
@@ -796,12 +894,30 @@ function packedPercent() {
 }
 
 function tick(dt) {
+  if (state.paused) return;
   if (state.holdT > 0) { state.holdT -= dt; return; }
   const { cabinTop, cabinBottom } = state.cabin;
   const span = cabinBottom - cabinTop;
   const progress = (state.sweepY - cabinTop) / span;
   const speed = (span / state.sweepSeconds) * (1 + 1.5 * progress);
-  state.sweepY += speed * dt;
+  const nextY = state.sweepY + speed * dt;
+
+  // Count sections the front seals while still empty — wasted space.
+  for (const bin of state.cabin.bins) {
+    for (let i = 0; i < bin.cells.length; i++) {
+      const edge = cellY(bin, i) + CELL_H;
+      if (bin.cells[i] === null && edge > state.sweepY && edge <= nextY) {
+        state.sealed += 1;
+        if (!state.sealedAt) state.sealedAt = edge;
+      }
+    }
+  }
+
+  state.sweepY = nextY;
+  // Bags still in the queue when the front reaches the tail never boarded.
+  if (state.sweepY >= cabinBottom && !state.over) {
+    state.missed = state.queue.length + (state.current ? 1 : 0);
+  }
   if (state.sweepY >= cabinBottom && !state.over) endLevel();
 }
 
@@ -848,10 +964,12 @@ function drawCabinShell() {
     ctx.stroke();
   });
 
-  // horizontal stabilizers at the tail
+  // horizontal stabilizers at the tail — widebody aircraft carry big
+  // cruciform h-tails, so scale them with fuselage width
   const tpY = height - 44;
+  const stabReach = state.cabin.width > 340 ? width - 20 : width - 8;
   ctx.fillStyle = "#152232";
-  [[fx0 + 10, 8], [fx1 - 10, width - 8]].forEach(([rootX, tipX]) => {
+  [[fx0 + 10, 8], [fx1 - 10, stabReach]].forEach(([rootX, tipX]) => {
     ctx.beginPath();
     ctx.moveTo(rootX, tpY);
     ctx.lineTo(tipX, tpY + 20);
@@ -861,9 +979,22 @@ function drawCabinShell() {
     ctx.fill();
     ctx.stroke();
   });
+  // H-tail spar on widebodies: the stabilizers sit on a beam above the fin
+  if (state.cabin.width > 340) {
+    ctx.beginPath();
+    ctx.moveTo(fx0 + 10, tpY + 22);
+    ctx.lineTo(stabReach, tpY + 22);
+    ctx.stroke();
+  }
 
   // fuselage: nose cone, straight body, tail cone
-  ctx.fillStyle = "#111a25";
+  // Widebodies get a rounder, fuller cross-section; narrowbodies stay slim.
+  const wide = state.cabin.width > 340;
+  const fus = ctx.createLinearGradient(fx0, 0, fx1, 0);
+  fus.addColorStop(0, "#0e1622");
+  fus.addColorStop(0.5, wide ? "#1a2636" : "#16202e");
+  fus.addColorStop(1, "#0e1622");
+  ctx.fillStyle = fus;
   ctx.beginPath();
   ctx.moveTo(cx, 4);
   ctx.bezierCurveTo(fx0 + 8, 10, fx0, noseBase - 22, fx0, noseBase);
@@ -906,10 +1037,15 @@ function drawCabinShell() {
     ctx.setLineDash([]);
   });
 
+  // seat blocks: rows of seats read better than a flat band
   ctx.fillStyle = "#1e2a3a";
   seatBlocks.forEach((block) => {
     for (let y = cabinTop; y < cabinBottom - 12; y += 30) {
-      roundRect(ctx, block.x + 3, y, block.width - 6, 22, 4);
+      // pair of seat cushions with a gap down the middle
+      const half = (block.width - 10) / 2;
+      roundRect(ctx, block.x + 3, y, half, 22, 4);
+      ctx.fill();
+      roundRect(ctx, block.x + block.width - 3 - half, y, half, 22, 4);
       ctx.fill();
     }
   });
@@ -922,6 +1058,13 @@ function drawCabinShell() {
     roundRect(ctx, fx1 - 9, y, 5, 14, 2.5);
     ctx.fill();
   }
+
+  // row numbers every 300 cabin px, so the player can track their progress
+  ctx.fillStyle = "#33445e";
+  ctx.font = "9px sans-serif";
+  for (let y = 300; y < cabinBottom - 60; y += 300) {
+    ctx.fillText(`R${Math.round((y - cabinTop) / 30) * 10 + 10}`, 2, y + 3);
+  }
 }
 
 function drawBin(bin) {
@@ -931,17 +1074,37 @@ function drawBin(bin) {
   const flashing = now < bin.flashUntil;
   const passed = binFullyPassed(bin);
 
+  // Latchable: this bag would exactly fill the bin — the play the score
+  // rewards, so make it hum.
+  const latchable = !bin.closed && !passed && !!state.current &&
+    !state.current.oversized &&
+    bin.cells.filter((c) => c === null).length === state.current.size &&
+    contiguousFreeRun(bin, state.current.size) !== -1;
+
   let fillStyle = "#1c2733";
   let strokeStyle = "#2f3f56";
   if (bin.closed) strokeStyle = "#ffd54f";
-  else if (passed) { fillStyle = "#161f29"; strokeStyle = "#2a2f3a"; }
+  else if (passed) { fillStyle = "#141a23"; strokeStyle = "#242a35"; }
+  if (latchable) {
+    const pulse = 0.5 + 0.5 * Math.sin(now / 240);
+    strokeStyle = "#ffd54f";
+    fillStyle = `rgba(255, 213, 79, ${0.04 + 0.07 * pulse})`;
+  }
   if (flashing) { strokeStyle = bin.flashColor; fillStyle = bin.flashColor + "22"; }
 
   ctx.fillStyle = fillStyle;
   ctx.strokeStyle = strokeStyle;
-  ctx.lineWidth = bin.closed ? 3 : 2;
+  ctx.lineWidth = bin.closed || latchable ? 3 : 2;
   roundRect(ctx, x, bin.y, w, bin.height, 9);
   ctx.fill();
+  ctx.stroke();
+
+  // inner shadow along the top edge — the bin is a hollow shelf
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, bin.y + 2.5);
+  ctx.lineTo(x + w - 6, bin.y + 2.5);
   ctx.stroke();
 
   const cellX = x + BIN_PAD;
@@ -951,26 +1114,37 @@ function drawBin(bin) {
     if (cell) {
       // occupied — the suitcase itself is drawn after the slots
     } else if (cellLocked(bin, i)) {
-      // unreachable empty space — wasted for the rest of the flight
-      ctx.fillStyle = "#20242f";
+      // unreachable empty space — wasted for the rest of the flight.
+      // Dark, matte, and crossed out so it never competes with live cells.
+      ctx.fillStyle = "#191f28";
       roundRect(ctx, cellX, cy, cellW, CELL_H, 4);
       ctx.fill();
-      ctx.strokeStyle = "#3a3040";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(150, 120, 150, 0.35)";
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      for (let hx = cellX + 4; hx < cellX + cellW; hx += 8) {
-        ctx.moveTo(hx, cy + CELL_H - 2);
-        ctx.lineTo(hx + CELL_H - 4, cy + 2);
+      for (let hx = cellX + 5; hx < cellX + cellW - 4; hx += 9) {
+        ctx.moveTo(hx, cy + CELL_H - 3);
+        ctx.lineTo(hx + CELL_H - 6, cy + 3);
       }
       ctx.stroke();
     } else {
-      ctx.fillStyle = "#2a3646";
+      // live, reachable space — the only cells that matter
+      ctx.fillStyle = "#2f4056";
       roundRect(ctx, cellX, cy, cellW, CELL_H, 4);
       ctx.fill();
+      ctx.strokeStyle = "rgba(79, 195, 247, 0.28)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
   });
 
   bin.bags.forEach((bag) => drawSuitcase(bin, bag, cellX, cellW));
+
+  if (latchable) {
+    ctx.fillStyle = "#ffd54f";
+    ctx.font = "600 10px sans-serif";
+    ctx.fillText("\u25B2 latch", x + w + 6, bin.y + 12);
+  }
 
   if (bin.closed) {
     ctx.fillStyle = "#ffd54f";
@@ -1103,17 +1277,28 @@ function drawWalkers() {
 function drawSweep() {
   const { width, cabinBottom } = state.cabin;
   const sy = Math.min(state.sweepY, cabinBottom);
+
+  // Everything the front has passed is sealed — dim it so "behind the line"
+  // reads at a glance, not by tracing each crossed-out cell.
+  ctx.fillStyle = "rgba(5, 9, 14, 0.5)";
+  ctx.fillRect(0, sy, width, cabinBottom - sy + 10);
+
   const grad = ctx.createLinearGradient(0, sy - 26, 0, sy + 4);
   grad.addColorStop(0, "rgba(79,195,247,0)");
   grad.addColorStop(1, "rgba(79,195,247,0.28)");
   ctx.fillStyle = grad;
   ctx.fillRect(WING_PAD + 4, sy - 26, width - WING_PAD * 2 - 8, 30);
+  // glow pass under the line itself
+  ctx.save();
+  ctx.shadowColor = "#4fc3f7";
+  ctx.shadowBlur = 8;
   ctx.strokeStyle = "#4fc3f7";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(WING_PAD + 6, sy);
   ctx.lineTo(width - WING_PAD - 6, sy);
   ctx.stroke();
+  ctx.restore();
 
   if (state.holdT > 0) {
     ctx.fillStyle = "#4fc3f7";
@@ -1124,12 +1309,45 @@ function drawSweep() {
   }
 }
 
+// --- floating score popups & sealed-space readout ----------------------------
+
+function drawPopups() {
+  const now = performance.now();
+  state.popups = state.popups.filter((p) => now - p.born < 900);
+  state.popups.forEach((p) => {
+    const age = (now - p.born) / 900;
+    ctx.globalAlpha = 1 - age;
+    ctx.fillStyle = p.color;
+    ctx.font = "700 14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(p.text, p.x, p.y - 14 - age * 34);
+    ctx.textAlign = "left";
+  });
+  ctx.globalAlpha = 1;
+}
+
+// Where the front last sealed empty space, if it still sits on screen.
+function drawSealedWarning() {
+  if (state.sealedAt) {
+    const { cabinTop } = state.cabin;
+    const y = Math.max(cabinTop + 20, state.sealedAt);
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 200);
+    ctx.fillStyle = `rgba(255, 107, 107, ${0.55 + 0.35 * pulse})`;
+    ctx.font = "600 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("\u26A0 space sealed \u2014 wasted", state.cabin.width / 2, y + 4);
+    ctx.textAlign = "left";
+  }
+}
+
 function draw() {
   ctx.clearRect(0, 0, state.cabin.width, state.cabin.height);
   drawCabinShell();
   state.cabin.bins.forEach(drawBin);
   drawWalkers();
   drawSweep();
+  drawSealedWarning();
+  drawPopups();
 }
 
 function updateHUD() {
@@ -1142,6 +1360,14 @@ function updateHUD() {
   const { cabinTop, cabinBottom } = state.cabin;
   const pct = Math.min(100, ((state.sweepY - cabinTop) / (cabinBottom - cabinTop)) * 100);
   progressFillEl.style.width = `${pct}%`;
+
+  const packedNow = packedPercent();
+  goalEl.textContent =
+    `Goal: pack the cabin to ${state.spec.targetPacked}% — you're at ${packedNow}%` +
+    (packedNow >= state.spec.targetPacked
+      ? " \u2713"
+      : ` \u00B7 ${state.sealed} sealed empty`);
+  goalEl.classList.toggle("ok", packedNow >= state.spec.targetPacked);
 
   if (state.current) {
     bagPreviewEl.style.height = `${state.current.size * 14 + 8}px`;
@@ -1200,12 +1426,114 @@ function loop(now) {
 
 // --- overlays & level flow ---------------------------------------------------
 
+// Best-stars line for the fleet screen, e.g. "★★☆".
+function starsHtml(specId) {
+  const n = bestStars[specId] || 0;
+  return `<span class="on">${"\u2605".repeat(n)}</span><span class="off">${"\u2605".repeat(3 - n)}</span>`;
+}
+
+// --- briefing art -------------------------------------------------------------
+// A small, per-aircraft top-down silhouette so the fleet screen shows each
+// tail's real proportions instead of the same box four times.
+function drawBriefArt(spec) {
+  const c = briefArtEl;
+  const bctx = c.getContext("2d");
+  const W = c.width, H = c.height;
+  bctx.clearRect(0, 0, W, H);
+  const cx = W / 2;
+  const wide = spec.id === "b77w";
+  const fw = wide ? 74 : 58;              // fuselage width
+  const fx0 = cx - fw / 2, fx1 = cx + fw / 2;
+  const noseBase = 44, tailBase = H - 46;
+
+  // wings (widebodies carry much bigger ones)
+  const wingY = noseBase + (tailBase - noseBase) * 0.4;
+  const reach = wide ? W - 6 : W - 26;
+  bctx.fillStyle = "#152232";
+  bctx.strokeStyle = "#243348";
+  bctx.lineWidth = 1.5;
+  [[fx0 + 4, 6], [fx1 - 4, W - 6]].forEach(([rx, tx]) => {
+    bctx.beginPath();
+    bctx.moveTo(rx, wingY);
+    bctx.lineTo(tx, wingY + 34);
+    bctx.lineTo(tx, wingY + 46);
+    bctx.lineTo(rx, wingY + 30);
+    bctx.closePath();
+    bctx.fill();
+    bctx.stroke();
+  });
+  // tail surfaces
+  const tpY = H - 34;
+  bctx.beginPath();
+  bctx.moveTo(fx0 + 6, tpY);
+  bctx.lineTo(10, tpY + 18);
+  bctx.lineTo(10, tpY + 26);
+  bctx.lineTo(fx0 + 6, tpY + 18);
+  bctx.closePath();
+  bctx.fill();
+  bctx.beginPath();
+  bctx.moveTo(fx1 - 6, tpY);
+  bctx.lineTo(W - 10, tpY + 18);
+  bctx.lineTo(W - 10, tpY + 26);
+  bctx.lineTo(fx1 - 6, tpY + 18);
+  bctx.closePath();
+  bctx.fill();
+
+  // fuselage
+  bctx.fillStyle = "#18232f";
+  bctx.strokeStyle = "#2b3d55";
+  bctx.lineWidth = 2;
+  bctx.beginPath();
+  bctx.moveTo(cx, 8);
+  bctx.bezierCurveTo(fx0, 12, fx0, noseBase - 14, fx0, noseBase);
+  bctx.lineTo(fx0, tailBase);
+  bctx.bezierCurveTo(fx0, H - 20, cx - 8, H - 8, cx, H - 6);
+  bctx.bezierCurveTo(cx + 8, H - 8, fx1, H - 20, fx1, tailBase);
+  bctx.lineTo(fx1, noseBase);
+  bctx.bezierCurveTo(fx1, noseBase - 14, fx1, 12, cx, 8);
+  bctx.closePath();
+  bctx.fill();
+  bctx.stroke();
+
+  // cockpit
+  bctx.fillStyle = "#22384f";
+  bctx.beginPath();
+  bctx.moveTo(cx - 14, 26);
+  bctx.quadraticCurveTo(cx, 16, cx + 14, 26);
+  bctx.lineTo(cx + 9, 34);
+  bctx.quadraticCurveTo(cx, 26, cx - 9, 34);
+  bctx.closePath();
+  bctx.fill();
+
+  // fin
+  bctx.fillStyle = "#22344c";
+  bctx.fillRect(cx - 2, tailBase + 8, 4, H - tailBase - 14);
+
+  // windows
+  bctx.fillStyle = "#2b3d55";
+  for (let y = noseBase + 6; y < tailBase - 10; y += 22) {
+    bctx.fillRect(fx0 + 4, y, 4, 10);
+    bctx.fillRect(fx1 - 8, y, 4, 10);
+  }
+
+  // bin row count readout
+  const capSum = (spec.layout.find((s) => s.type === "bins") || {}).capacities || [];
+  bctx.fillStyle = "#8fa2bd";
+  bctx.font = "10px sans-serif";
+  bctx.textAlign = "center";
+  bctx.fillText(`${capSum.length} bin sizes · ${spec.type}`, cx, H - 2);
+  bctx.textAlign = "left";
+  briefArtEl.style.display = "block";
+}
+
 function clearOverlay() {
   quirkListEl.innerHTML = "";
   speedRowEl.innerHTML = "";
   fleetListEl.innerHTML = "";
   overlayButtonsEl.innerHTML = "";
   overlayBodyEl.textContent = "";
+  overlayStarsEl.textContent = "";
+  briefArtEl.style.display = "none";
 }
 
 function addButton(label, cls, onClick) {
@@ -1222,6 +1550,7 @@ function showBriefing(levelIndex) {
   clearOverlay();
   overlayTagEl.textContent = `Level ${levelIndex + 1} · ${spec.tail}`;
   overlayTitleEl.textContent = spec.name;
+  drawBriefArt(spec);
   overlayBodyEl.textContent = spec.brief;
   spec.quirks.forEach((q) => {
     const li = document.createElement("li");
@@ -1270,7 +1599,8 @@ function showFleetSelect() {
     btn.innerHTML =
       `<span class="fdiff">${pips}</span>` +
       `<span class="fname">${spec.name}</span>` +
-      `<span class="fsub">${i >= unlocked ? "Locked" : spec.type}</span>`;
+      `<span class="fsub">${i >= unlocked ? "Locked" : spec.type}</span>` +
+      `<span class="fstars">${starsHtml(spec.id)}</span>`;
     btn.addEventListener("click", () => showBriefing(i));
     fleetListEl.appendChild(btn);
   });
@@ -1291,10 +1621,29 @@ function endLevel() {
   clearOverlay();
   overlayTagEl.textContent = passed ? "Doors closed" : "Delayed departure";
   overlayTitleEl.textContent = passed ? `${spec.name} dispatched` : `${spec.name} left space on the table`;
-  overlayBodyEl.textContent =
+
+  // Star rating: meeting the target is 1★; beat it by 5% or 15% for more.
+  const stars = !passed ? 0 :
+    packed >= spec.targetPacked + 15 ? 3 :
+    packed >= spec.targetPacked + 5 ? 2 : 1;
+  if (stars > (bestStars[spec.id] || 0)) {
+    bestStars[spec.id] = stars;
+    saveProgress();
+  }
+  overlayStarsEl.innerHTML = stars
+    ? `<span class="on">${"\u2605".repeat(stars)}</span><span class="off">${"\u2605".repeat(3 - stars)}</span>`
+    : "";
+
+  let body =
     `Stowed ${state.stowed} bags, latched ${state.closed} bins and pink-tagged ` +
     `${state.oversizedHandled} oversized bags. The cabin ended ${packed}% packed ` +
     `(target ${spec.targetPacked}%). Score ${state.score} · career ${careerScore}.`;
+  if (!passed) {
+    body += ` ${state.sealed} sections were sealed empty under the line and ` +
+      `${state.missed} bags never got stowed — keep the bins full ahead of the front, ` +
+      `then latch them for the bonus.`;
+  }
+  overlayBodyEl.textContent = body;
 
   const hasNext = state.levelIndex + 1 < FLEET.length;
   if (passed && hasNext) {
@@ -1323,6 +1672,17 @@ canvas.addEventListener("click", (e) => {
 });
 
 gateCheckBtn.addEventListener("click", gateCheck);
+pauseBtnEl.addEventListener("click", () => {
+  if (state && state.paused) resumeLevel();
+  else pauseLevel();
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" || e.key === "p" || e.key === "P") {
+    if (state && state.paused) resumeLevel();
+    else if (state && !state.over) pauseLevel();
+  }
+});
 
 loadProgress();
 showBriefing(Math.min(unlocked - 1, FLEET.length - 1));
