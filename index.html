@@ -412,6 +412,13 @@ const SPEED_MODES = [
   { id: "hard",   name: "Brisk",   note: "No slack",       mult: 1.00 },
 ];
 
+// The flight attendant (the player's body). Tapping a bin sends them walking;
+// the stow happens on arrival. Speed is in cabin px/s — about 2.2x the
+// passengers' 62 px/s walk, and the main tuning knob for how much routing
+// matters. `lead` is how far ahead of the boarding front they are carried;
+// `reach` is how close counts as arrived.
+const FA = { speed: 135, lead: 18, reach: 6 };
+
 const SCORE = {
   placeBase: 6,
   placePerSize: 4,
@@ -703,6 +710,14 @@ function startLevel(levelIndex) {
     missed: 0,
     sealed: 0,   // empty sections the front rolled past, wasted
     sealedAt: 0,
+    // The attendant starts at the door, in the first aisle.
+    fa: {
+      x: cabin.aisles[0].x + cabin.aisles[0].width / 2,
+      y: cabin.cabinTop + FA.lead + 12,
+      target: null,    // bin they are walking to, or null
+      walking: false,
+      face: 1,         // +1 walking aft, -1 walking toward the nose
+    },
     walkers: cabin.aisles.flatMap((aisle) =>
       [0.0, 0.2, 0.4, 0.6, 0.8].map((phase, i) => ({
         aisle,
@@ -802,10 +817,97 @@ function spawnPopup(x, y, text, color) {
   state.popups.push({ x, y, text, color, born: performance.now() });
 }
 
+// --- the attendant ------------------------------------------------------------
+
+// The aisle that serves a bin: the nearest one across the cabin.
+function aisleFor(bin) {
+  const bx = bin.column.x + bin.column.width / 2;
+  let best = state.cabin.aisles[0];
+  let bestD = Infinity;
+  for (const a of state.cabin.aisles) {
+    const d = Math.abs(a.x + a.width / 2 - bx);
+    if (d < bestD) { bestD = d; best = a; }
+  }
+  return best;
+}
+
+// Where the attendant stands to work a bin: the middle of whatever part of it
+// the front has not yet sealed, but never behind the front itself.
+function standPoint(bin) {
+  const lo = Math.max(bin.y, state.sweepY);
+  const mid = (lo + bin.y + bin.height) / 2;
+  const a = aisleFor(bin);
+  return { x: a.x + a.width / 2, y: Math.max(mid, state.sweepY + FA.lead) };
+}
+
+function cancelWalk() {
+  state.fa.target = null;
+  state.fa.walking = false;
+}
+
+// Advance the attendant toward their target; act on the bin once there.
+function walkAttendant(dt) {
+  const fa = state.fa;
+  if (!fa.target) return;
+  const bin = fa.target;
+
+  // The crowd got there first: the bin is gone. Stop where we are.
+  if (binFullyPassed(bin)) {
+    cancelWalk();
+    flash(bin, "#ff6b6b", 250);
+    showToast("The line pushed past that bin before you got there");
+    return;
+  }
+
+  const p = standPoint(bin);
+  const dx = p.x - fa.x;
+  const dy = p.y - fa.y;
+  const dist = Math.hypot(dx, dy);
+  const step = FA.speed * dt;
+  if (dy !== 0) fa.face = Math.sign(dy);
+
+  if (dist <= Math.max(step, FA.reach)) {
+    fa.x = p.x;
+    fa.y = p.y;
+    cancelWalk();
+    resolveBin(bin);
+  } else {
+    fa.x += (dx / dist) * step;
+    fa.y += (dy / dist) * step;
+  }
+}
+
+// The boarding front carries the attendant aft: nobody stands in the crowd.
+function pushAttendant() {
+  const minY = state.sweepY + FA.lead;
+  if (state.fa.y < minY) state.fa.y = minY;
+}
+
+// A tap is an order: walk to that bin. The stow, latch or oversized reveal
+// happens on arrival. A new tap retargets; there is no queue of orders.
 function handleBinTap(bin) {
   if (state.over || state.paused || bin.closed) return;
+  if (bin === state.fa.target) return;
 
-  // Tapping a full bin latches it shut, as long as you can still reach it.
+  if (binFullyPassed(bin)) {
+    flash(bin, "#ff6b6b", 250);
+    showToast("The line already pushed past that bin");
+    return;
+  }
+  // Nothing to do at a bin we cannot stow in and cannot latch.
+  if (!state.current && !isFull(bin)) return;
+
+  state.fa.target = bin;
+  state.fa.walking = true;
+  flash(bin, "#4fc3f7", 350);   // acknowledge the tap straight away
+  walkAttendant(0);             // already standing there? act at once
+}
+
+// What happens at a bin once the attendant has arrived.
+function resolveBin(bin) {
+  if (state.over || state.paused || bin.closed) return;
+
+  // A full bin latches shut, as long as you can still reach it.
   if (isFull(bin)) {
     if (binFullyPassed(bin)) {
       flash(bin, "#ff6b6b", 250);
@@ -872,6 +974,8 @@ function handleBinTap(bin) {
 
 function gateCheck() {
   if (!state.current || state.over || state.paused) return;
+  // The bag this walk was for is leaving; don't let it stow the next one.
+  cancelWalk();
   const px = state.cabin.width / 2;
   const py = Math.max(state.cabin.cabinTop + 50, state.sweepY - 70);
   if (state.current.oversized) {
@@ -895,6 +999,8 @@ function packedPercent() {
 
 function tick(dt) {
   if (state.paused) return;
+  // The attendant can move (and stow) during the pre-boarding hold too.
+  walkAttendant(dt);
   if (state.holdT > 0) { state.holdT -= dt; return; }
   const { cabinTop, cabinBottom } = state.cabin;
   const span = cabinBottom - cabinTop;
@@ -914,6 +1020,7 @@ function tick(dt) {
   }
 
   state.sweepY = nextY;
+  pushAttendant();
   // Bags still in the queue when the front reaches the tail never boarded.
   if (state.sweepY >= cabinBottom && !state.over) {
     state.missed = state.queue.length + (state.current ? 1 : 0);
@@ -1090,11 +1197,13 @@ function drawBin(bin) {
     strokeStyle = "#ffd54f";
     fillStyle = `rgba(255, 213, 79, ${0.04 + 0.07 * pulse})`;
   }
+  const ordered = state.fa.target === bin;   // the attendant is on their way here
+  if (ordered) strokeStyle = "#4fc3f7";
   if (flashing) { strokeStyle = bin.flashColor; fillStyle = bin.flashColor + "22"; }
 
   ctx.fillStyle = fillStyle;
   ctx.strokeStyle = strokeStyle;
-  ctx.lineWidth = bin.closed || latchable ? 3 : 2;
+  ctx.lineWidth = bin.closed || latchable || ordered ? 3 : 2;
   roundRect(ctx, x, bin.y, w, bin.height, 9);
   ctx.fill();
   ctx.stroke();
@@ -1274,6 +1383,82 @@ function drawWalkers() {
   });
 }
 
+// The player: a flight attendant in a navy uniform, a little larger than the
+// passengers, with a ring on the floor so you can always find yourself, and a
+// dotted line to wherever you are headed.
+function drawAttendant() {
+  const fa = state.fa;
+  const now = performance.now();
+
+  if (fa.target) {
+    const p = standPoint(fa.target);
+    ctx.strokeStyle = "rgba(79, 195, 247, 0.75)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([2, 6]);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(fa.x, fa.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(79, 195, 247, 0.9)";
+    ctx.fill();
+  }
+
+  const stride = now / 130;
+  const moving = fa.walking;
+  const swing = moving ? Math.sin(stride) * 5.5 : 0;
+  const sway = moving ? Math.sin(stride) * 0.14 : 0;
+  const x = fa.x;
+  const y = fa.y;
+
+  // floor ring
+  const pulse = 0.5 + 0.5 * Math.sin(now / 260);
+  ctx.strokeStyle = `rgba(79, 195, 247, ${0.45 + 0.3 * pulse})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, 19, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // arms
+  ctx.fillStyle = "#e8c39e";
+  [-1, 1].forEach((side) => {
+    ctx.beginPath();
+    ctx.arc(x + side * 13 * Math.cos(sway), y + side * swing, 3.6, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // shoulders in uniform navy, with a gold scarf stripe
+  ctx.fillStyle = "#26406b";
+  ctx.beginPath();
+  ctx.ellipse(x, y, 13.5, 7.5, sway, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.fillStyle = "#e0b64a";
+  ctx.fillRect(x - 3, y - 1.5, 6, 3);
+
+  // head; hair sits on the side away from the direction of travel
+  ctx.fillStyle = "#e8c39e";
+  ctx.beginPath();
+  ctx.arc(x, y, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#3b2a1e";
+  ctx.beginPath();
+  if (fa.face >= 0) ctx.arc(x, y - 1.2, 5.2, Math.PI, Math.PI * 2);
+  else ctx.arc(x, y + 1.2, 5.2, 0, Math.PI);
+  ctx.fill();
+  // little cap
+  ctx.fillStyle = "#26406b";
+  ctx.beginPath();
+  ctx.arc(x, y - fa.face * 2.2, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function drawSweep() {
   const { width, cabinBottom } = state.cabin;
   const sy = Math.min(state.sweepY, cabinBottom);
@@ -1345,6 +1530,7 @@ function draw() {
   drawCabinShell();
   state.cabin.bins.forEach(drawBin);
   drawWalkers();
+  drawAttendant();
   drawSweep();
   drawSealedWarning();
   drawPopups();
@@ -1380,7 +1566,7 @@ function updateHUD() {
     } else {
       const bagNames = { 1: "Personal item", 2: "Carry-on", 3: "Rollaboard" };
       bagLabelEl.textContent = `${bagNames[state.current.size] || "Bag"} — ${state.current.size} section${state.current.size > 1 ? "s" : ""}`;
-      bagSubEl.textContent = "Tap bin space ahead of the boarding line.";
+      bagSubEl.textContent = "Tap a bin ahead of the line — you walk there to stow it.";
       bagSubEl.classList.remove("warn");
       gateCheckBtn.classList.remove("pulse");
     }

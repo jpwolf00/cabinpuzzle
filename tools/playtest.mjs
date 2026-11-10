@@ -9,7 +9,8 @@
 //
 // Usage:
 //   node tools/playtest.mjs [--runs 10] [--speed medium] [--levels 0,1,2,3]
-//                           [--bots greedy,planner,casual] [--out results.json]
+//                           [--bots greedy,planner,nearest,casual] [--out results.json]
+//                           [--fa-speed 135] [--weights 1,1.5,2]
 //
 // Each (level, run) pair seeds Math.random identically for every bot, so all
 // bots play the same cabin and the same bag queue. Compare bots with the paired
@@ -22,7 +23,11 @@
 //            walk seconds plus 2x spare sections in the run (lower is better),
 //            skips bins it cannot reach before they seal, and pink-tags a bag
 //            when nothing is reachable. Weights are fixed, not tuned per result.
+//   nearest  Ignores urgency: the closest bin the bag fits in.
 //   casual   Greedy's rule with a slower 1.1 s of think time per action.
+//
+// --weights wT,wW,wS overrides the planner's score = wT*T + wW*W + wS*slack, to
+// check whether *any* reasonable planner beats greedy (sensitivity analysis).
 //
 // Bots never latch bins and never use the hold slot: the success metric is
 // packed percentage, and latching only affects score.
@@ -41,7 +46,7 @@ function loadPlaywright() {
 }
 
 function parseArgs(argv) {
-  const o = { runs: 10, speed: 'medium', levels: '0,1,2,3', bots: 'greedy,planner,casual', out: '', faSpeed: '' };
+  const o = { runs: 10, speed: 'medium', levels: '0,1,2,3', bots: 'greedy,planner,casual', out: '', faSpeed: '', weights: '1,1.5,2' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--runs') o.runs = +argv[++i];
@@ -50,6 +55,7 @@ function parseArgs(argv) {
     else if (a === '--bots') o.bots = argv[++i];
     else if (a === '--out') o.out = argv[++i];
     else if (a === '--fa-speed') o.faSpeed = argv[++i];
+    else if (a === '--weights') o.weights = argv[++i];
     else throw new Error('unknown argument ' + a);
   }
   return o;
@@ -74,9 +80,11 @@ await page.waitForTimeout(300);
 
 const results = await page.evaluate(({ opts }) => {
   const DT = 1 / 60;
+  const [wT, wW, wS] = opts.weights.split(',').map(Number);
   const BOTS = {
     greedy:  { think: 0.7, plan: false },
-    planner: { think: 0.7, plan: true },
+    planner: { think: 0.7, plan: true, wT, wW, wS },
+    nearest: { think: 0.7, plan: true, wT: 0, wW: 1, wS: 0 },
     casual:  { think: 1.1, plan: false },
   };
 
@@ -177,7 +185,7 @@ const results = await page.evaluate(({ opts }) => {
       const W = walkSeconds(c.bin);
       if (T - W < 0.3) continue;                 // would seal before we arrive
       const slack = c.run.len - size;
-      const score = T + 1.5 * W + 2 * slack;
+      const score = bot.wT * T + bot.wW * W + bot.wS * slack;
       if (score < bestScore) { bestScore = score; best = c; }
     }
     if (!best) { gateCheck(); return; }
