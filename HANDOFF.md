@@ -4,7 +4,7 @@ Read this file first. It replaces the history of a very long previous session.
 
 ## Paste this to start the new session
 
-> Continue the `bins.html` prototype in this repo. Read `HANDOFF.md` first, then play-test fixes in the order it lists. Use the existing harness before and after each change. Work only on branch `claude/airplane-luggage-puzzle-5osasn`; never touch `main`, never open a PR unless I ask.
+> Continue the `bins.html` prototype in this repo. Read `HANDOFF.md` first, then play-test fixes in the order it lists. Use the existing harness before and after each change. Work only on the branch the session assigns; never touch `main`, never open a PR unless I ask.
 
 ## What this is
 
@@ -24,44 +24,55 @@ A mobile-first puzzle game: you are a flight attendant packing passengers' lugga
 
 The sweeping-front design has one correct move per bag, so skill has nothing to improve. Measured with bots on identical seeded cabins (Steady speed): a one-rule greedy bot packs 93-100% and a "planner" bot is within 0 to 3 points of it. We built an attendant avatar hoping to create routing decisions; planner minus greedy on the A320 was -2.2 points (needed +10) and stayed within noise at every walk speed from 40 to 300 px/s, across 16 planner weightings. Cause: the front pushes the attendant, so the most urgent bin is also the nearest one (78-85% of greedy's picks on the single-aisle jets). Bags are also one-dimensional (1-3 sections), so there is no packing puzzle. Details are in commit `a8b44a6`'s message.
 
-## The current design: `bins.html` (two-sided inventory Tetris)
+## The current design: `bins.html` (inventory Tetris inside a cabin, four aircraft)
 
-- You face two overhead bins (stacked vertically on a phone), each a 6x3 grid.
-- Bags are rotatable shapes: coat 1x1, tote 2x1, duffel 3x1, guitar 4x1, backpack 2x2, roller 2x3, an L. They drop with gravity at a chosen column.
-- A tray shows the next 3 passengers' bags; take any one. A new passenger joins the line every 4.5 s, easing to 2.2 s. 10 waiting = flight delayed (loss). 45 passengers = win.
-- A full bin latches automatically (+100), slides away, and a fresh one slides in. An early-latch button exists but each empty cell costs 15 points.
-- 3 pink tags per flight remove a bag from the tray as an escape valve.
-- Simulation is separated from rendering. Globals: `newGame(seed)`, `tick(dt)`, `canPlace`, `dropBag`, `latchBin`, `pinkTag`, `state`. Tuning constants are in the `TUNE` object near the top.
+The owner liked the two-bin Tetris but missed the aisle and the aircraft progression, so both were folded back in (branch `claude/focused-feynman-rvyfts`).
+
+- **Bins are a finite run down the fuselage.** Each side of the aircraft has a fixed number of bins, nose to tail. A full bin latches (+100) and the next bin aft slides in. Latching early wastes space you cannot get back; run out of bins with bags left and no pink tags and the flight fails ("Out of bin space").
+- **The aisle sits between the bins.** Passengers walk in from the door and queue in it; the first three are the tray. If the line backs up to the door (the aircraft's `limit`), the flight is delayed.
+- **A whole-aircraft map** at the top shows every bin: gold = latched full, grey = latched with waste, blue outline = in use.
+- **Aircraft are levels** (`PLANES` array near the top; everything per-level is data there):
+
+| Aircraft | Bins on screen | Bins on the plane | Passengers | New bag shapes |
+|---|---|---|---|---|
+| CRJ-200 | 1 (5x2) | 8 | 18 | coat, tote, duffel, backpack, L |
+| A320 | 2 (6x3) | 5 + 5 | 45 | roller, guitar |
+| 737-900ER | 2 (6x3) | 8 + 8 | 70 | T-shape, faster line |
+| 777-300ER | 3 (6x3, 8x3 centre, 6x3), two aisles | 7 + 7 + 7 | 100 | S-shape, fastest line |
+
+- Win = 1 star; 2 and 3 stars are score thresholds per aircraft (`stars`). Winning unlocks the next aircraft. Progress is in localStorage under `overheadbin.bins.v1`.
+- Simulation is still separate from rendering. Globals: `newGame(seed, planeIndex)`, `tick(dt)`, `canPlace`, `dropBag`, `latchBin`, `pinkTag`, `binOpen`, `starsFor`, `state`, `PLANES`, `TUNE` (points only; pace lives on each plane).
 
 ### Measured (20 seeds, bots act every 0.9 s)
 
-| Arrival pace | Bot | Win | Score | Wasted cells |
+| Aircraft | Greedy score | Lookahead score | Gap | Bins used |
 |---|---|---|---|---|
-| 4.5 to 2.2 s (shipped) | greedy | 100% | 995 | 21.5 |
-| | lookahead | 100% | 1213 | 21.1 |
-| 1.5 to 0.9 s (stress) | greedy | 55% | 1053 | 13.3 |
-| | lookahead | 100% | 1197 | 18.7 |
+| CRJ-200 | 416 | 425 | +9 (training level, by design) | 3.6 of 8 |
+| A320 | 995 | 1213 | +219 (identical to the pre-change prototype) | 5.8 of 10 |
+| 737-900ER | 1539 | 1900 | +361 | 11.7 of 16 |
+| 777-300ER | 2388 | 2734 | +347 | 14.7 of 21 |
 
-Lookahead beats greedy (+219 score at the shipped pace; wins every game where greedy loses 45% under stress), which is the property the old design lacked. At the shipped pace both bots always win, so they cannot yet show where a human would struggle. Reproduce: `node tools/playtest-bins.mjs 20 [start end]`.
+Both bots win every flight at the shipped pace, so the bots still cannot show where a human struggles. With 6 bins per side the 777 ran out of space in 3 of 20 games for both bots, which is why it has 7. Star thresholds sit just under the greedy and lookahead averages. Reproduce: `node tools/playtest-bins.mjs 20 [paceScale]`.
 
 ## Not verified (do these first)
 
-1. **A human has not played it.** The pace and difficulty are untuned for people. Ask the owner to play and report feel before tuning further.
-2. Real **touch** drag-and-drop (only mouse drags were tested), the pink-tag button, the early-latch button, the end screen, desktop and landscape layouts.
+1. **A human has not played it.** Pace, bin counts and star thresholds are bot-derived guesses.
+2. On a short phone screen the 777's cells shrink to about 32 px (three bins stacked). Touch drag and tap-to-drop were verified in Playwright on the CRJ only; check the 777 by hand.
+3. Desktop and landscape layouts.
 
 ## Suggested next steps, in order
 
-1. Fix anything the owner reports from playing it; verify the unverified items above in Playwright at 390x844 with `hasTouch`.
-2. Tune arrival pace and `TUNE.limit` from the owner's feedback, using the harness to keep the greedy-vs-lookahead gap.
-3. Add game feel: latch flash and slide, a clear "queue is filling" warning, drop animation, simple sound.
-4. Port the aircraft as levels (CRJ: shallow bins and more pink-tag trouble; 777: a third centre bin) and the suitcase art from `index.html`'s `drawSuitcase`. Reuse the stars and localStorage pattern.
+1. Fix anything the owner reports from playing it.
+2. Tune pace, `limit`, bin `count` and `stars` per aircraft from that feedback, keeping the greedy-vs-lookahead gap.
+3. Game feel: drop animation, a stronger "aisle is filling" warning, simple sound, a walk-aft transition when a bin latches.
+4. Port the suitcase art from `index.html`'s `drawSuitcase`.
 5. Only then decide whether to retire the sweep version on `main` and publish `bins.html` to Pages.
 
 ## How to work
 
 - **Verify in a browser, not only the harness.** The harness skips rendering. Playwright is at `/opt/node22/lib/node_modules/playwright` (CommonJS; use `createRequire`), Chromium at `/opt/pw-browsers/chromium`. Pass `executablePath` explicitly; do not run `playwright install`.
 - Keep `tick` free of the wall clock and all randomness behind the seeded PRNG so the harness keeps working.
-- Commit messages end with the two attribution lines the session specifies. Push with `git push -u origin claude/airplane-luggage-puzzle-5osasn`.
+- Commit messages end with the two attribution lines the session specifies. Push with `git push -u origin <session branch>`.
 - Pages deploys from `main` only. Nothing on this branch is public.
 
 ## Cost advice
